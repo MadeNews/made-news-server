@@ -1,0 +1,13 @@
+[
+    {
+        "prompt":"Generate a random article about politics as theme and use any world leader as protagnist", "category": "Politics"
+    },
+
+    {
+        "prompt": "Generate a random article about aliens as theme and create bizarre scenarios regarding aliens and earth", "category": "Aliens"
+    },
+    
+    {
+        "prompt": "Generate a random article about education system and univerisities. Use any world renowned university as lead example.", "category": "Education"
+    }
+]
