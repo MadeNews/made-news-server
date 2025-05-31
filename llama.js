@@ -1,3 +1,7 @@
+const axios = require('axios');
+require('dotenv').config();
+
+
 const generateSatireStory = async (title) => {
     const prompt = `You're MadeNewsBot, a fake news anchor. Write a 3-paragraph satirical article titled: "${title}". The tone should be absurd, funny, and in the style of The Onion or ClickHole. Present it like a real news story.`;
 
@@ -23,3 +27,4 @@ const generateSatireStory = async (title) => {
         return "We're having technical difficulties generating this story. Please try again later.";
     }
 };
+module.exports = generateSatireStory
