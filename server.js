@@ -4,7 +4,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const fs = require('fs');
 const refreshWeeklyArticles = require('./refreshWeekly');
-app.use('/assets', express.static('public'));
+
 
 require('dotenv').config();
 
@@ -12,6 +12,7 @@ const app = express();
 const PORT = 3000;
 
 // Middleware
+app.use('/assets', express.static('public'));
 app.use(express.json());
 app.use(cors({
   origin: '*',
