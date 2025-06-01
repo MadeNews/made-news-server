@@ -20,7 +20,16 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// API Key middleware — applied only to protected API routes
 app.use((req, res, next) => {
+  const isPublicRoute =
+    req.path === '/story/random' ||
+    req.path.startsWith('/assets') ||
+    req.path === '/' ||  // if you add a homepage later
+    req.path.startsWith('/favicon'); // optional if browser requests favicon
+
+  if (isPublicRoute) return next();
+
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== process.env.APP_API_KEY) {
     return res.status(401).json({ success: false, error: 'Unauthorized access' });
