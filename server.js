@@ -6,6 +6,26 @@ const fs = require('fs');
 const refreshWeeklyArticles = require('./refreshWeekly');
 
 
+// Allow-list for public routes
+const PUBLIC_PATHS = [
+  '/story/random',
+  '/assets',         // for static assets
+  '/favicon.ico',    // optional
+];
+
+// Middleware to protect all other routes with API key
+app.use((req, res, next) => {
+  const isPublic = PUBLIC_PATHS.some(path => req.path.startsWith(path));
+  if (isPublic) return next();
+
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey !== process.env.APP_API_KEY) {
+    return res.status(401).json({ success: false, error: 'Unauthorized access' });
+  }
+  next();
+});
+
+
 require('dotenv').config();
 
 const app = express();
@@ -22,13 +42,8 @@ app.use(cors({
 
 // API Key middleware — applied only to protected API routes
 app.use((req, res, next) => {
-  const isPublicRoute =
-    req.path === '/story/random' ||
-    req.path.startsWith('/assets') ||
-    req.path === '/' ||  // if you add a homepage later
-    req.path.startsWith('/favicon'); // optional if browser requests favicon
-
-  if (isPublicRoute) return next();
+  const isPublic = PUBLIC_PATHS.some(path => req.path.startsWith(path));
+  if (isPublic) return next();
 
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== process.env.APP_API_KEY) {
