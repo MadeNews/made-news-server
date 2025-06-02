@@ -1,84 +1,119 @@
-const axios = require('axios');
-require('dotenv').config();
+const axios = require("axios");
+require("dotenv").config();
 
 const generateSatireStory = async (title) => {
-    const prompt = `You're MadeNewsBot, a fake news anchor. Write a 3-paragraph satirical article titled: "${title}". The tone should be absurd, funny, and in the style of The Onion or ClickHole. Present it like a real news story.`;
+  const prompt = `
+You're MadeNewsBot, a fake news anchor. Write a satirical news article based on the following title:
 
-    try {
-        const result = await axios.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            {
-                model: "llama3-70b-8192",
-                messages: [{ role: "user", content: prompt }],
-                temperature: 0.8,
-                max_tokens: 300
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                    'Content-Type': "application/json"
-                }
-            }
-        );
+"${title}"
 
-        const content = result.data.choices[0].message.content.trim();
-        const paragraphs = content.split(/\n\s*\n/);
+Respond in this exact format:
+<Repeat the title on the first line>
 
-        return {
-            title,
-            content,
-            paragraphs,
-            createdAt: new Date().toISOString()
-        };
+<Three paragraphs of absurd, funny, and satirical content. Separate each paragraph with a blank line.>
 
-    } catch (error) {
-        console.error('Failed to generate satire:', error.message);
-        return {
-            error: true,
-            message: "We're having technical difficulties generating this story. Please try again later."
-        };
+Do NOT include any extra explanations, markdown, HTML, or labels like "Title:" or "Content:". Just return clean plain text.
+`;
+
+  try {
+    const result = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama3-70b-8192",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.8,
+        max_tokens: 400,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const raw = result.data.choices[0].message.content.trim();
+    console.log("[Satire by title] Raw model response:\n", raw);
+
+    const [titleLine, ...rest] = raw.split(/\n\s*\n/);
+    const finalTitle = titleLine.trim();
+    const content = rest.join("\n\n").trim();
+    const paragraphs = content.split(/\n\s*\n/);
+
+    if (!finalTitle || paragraphs.length < 2) {
+      throw new Error("Incomplete model response");
     }
+
+    return {
+      title: finalTitle,
+      paragraphs,
+      createdAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Failed to generate satire:", error.message);
+    return {
+      error: true,
+      message:
+        "We're having technical difficulties generating this story. Please try again later.",
+    };
+  }
 };
 
+
 const generateRandomStory = async () => {
-    const prompt = `You're MadeNewsBot, an absurd, satirical news anchor for a fake news outlet. Invent a completely fictional and ridiculous headline that sounds like it belongs on The Onion or ClickHole. Then write a 3-paragraph fake news article based on that headline. Make the tone exaggerated, witty, and surreal — filled with over-the-top quotes, bizarre logic, and mock-serious reporting. Treat the nonsense as world-shattering news. End with a punchy or ironic twist.`;
+  const prompt = `
+You're MadeNewsBot, a fake news anchor. Write a satirical news article in the following format:
 
-    try {
-        const result = await axios.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            {
-                model: "llama3-70b-8192",
-                messages: [{ role: "user", content: prompt }],
-                temperature: 0.8,
-                max_tokens: 300
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                    'Content-Type': "application/json"
-                }
-            }
-        );
+<One-line title>
 
-        const content = result.data.choices[0].message.content.trim();
-        const titleMatch = content.match(/^(.*?)(?=\n|$)/);
-        const title = titleMatch ? titleMatch[1].replace(/\*\*/g, '').trim() : "Untitled";
-        const paragraphs = content.split(/\n\s*\n/);
+<Three paragraphs of funny, absurd content. Separate each paragraph with a blank line.>
 
-        return {
-            title,
-            content,
-            paragraphs,
-            createdAt: new Date().toISOString()
-        };
+Do NOT include Markdown, HTML, or JSON. Only return plain text in the format above. Do NOT include labels like "Title" or "Content".
+`;
 
-    } catch (error) {
-        console.error('Failed to generate satire:', error.message);
-        return {
-            error: true,
-            message: "We're having technical difficulties generating this story. Please try again later."
-        };
+  const result = await axios.post(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      model: "llama3-70b-8192",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.8,
+      max_tokens: 500,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
     }
+  );
+
+  try {
+    const raw = result.data.choices[0].message.content.trim();
+    console.log("[Raw response]", raw);
+
+    const [titlePart, ...rest] = raw.split(/\n\s*\n/);
+    const title = titlePart.trim();
+    const content = rest.join("\n\n").trim();
+    const paragraphs = content.split(/\n\s*\n/);
+
+    if (!title || paragraphs.length < 2) {
+      throw new Error("Incomplete story content");
+    }
+
+    return {
+      title,
+      content,
+      paragraphs,
+      createdAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error("Failed to process story:", err.message);
+    return {
+      error: true,
+      message:
+        "We're having technical difficulties generating this story. Please try again later.",
+    };
+  }
 };
 
 module.exports = { generateSatireStory, generateRandomStory };

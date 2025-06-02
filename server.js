@@ -1,177 +1,144 @@
-const { generateSatireStory, generateRandomStory } = require('./llama');
-const express = require('express');
-const cors = require('cors');
-const cron = require('node-cron');
-const fs = require('fs');
-const refreshWeeklyArticles = require('./refreshWeekly');
+const { generateSatireStory, generateRandomStory } = require("./llama");
+const express = require("express");
+const cors = require("cors");
+const cron = require("node-cron");
+const fs = require("fs");
+const path = require("path");
+const refreshWeeklyArticles = require("./refreshWeekly");
 
-
-// Allow-list for public routes
-const PUBLIC_PATHS = [
-  '/story/random',
-  '/assets',         // for static assets
-  '/favicon.ico',    // optional
-];
-
-// Middleware to protect all other routes with API key
-app.use((req, res, next) => {
-  const isPublic = PUBLIC_PATHS.some(path => req.path.startsWith(path));
-  if (isPublic) return next();
-
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey !== process.env.APP_API_KEY) {
-    return res.status(401).json({ success: false, error: 'Unauthorized access' });
-  }
-  next();
-});
-
-
-require('dotenv').config();
+require("dotenv").config();
 
 const app = express();
 const PORT = 3000;
 
-// Middleware
-app.use('/assets', express.static('public'));
-app.use(express.json());
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// ✅ Define PUBLIC paths correctly
+const PUBLIC_PATHS = [
+  "/story/random",
+  "/style.css",
+  "/script.js",
+  "/app-logo.png",
+  "/instagram.png",
+  "/favicon.ico",
+];
 
-// API Key middleware — applied only to protected API routes
+// ✅ Serve static files BEFORE auth middleware
+app.use(express.static(path.join(__dirname, "public")));
+
+// ✅ CORS + JSON body parser
+app.use(express.json());
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// ✅ API key middleware (run AFTER static middleware)
 app.use((req, res, next) => {
-  const isPublic = PUBLIC_PATHS.some(path => req.path.startsWith(path));
+  const isPublic = PUBLIC_PATHS.some((path) => req.path.startsWith(path));
   if (isPublic) return next();
 
-  const apiKey = req.headers['x-api-key'];
+  const apiKey = req.headers["x-api-key"];
   if (apiKey !== process.env.APP_API_KEY) {
-    return res.status(401).json({ success: false, error: 'Unauthorized access' });
+    return res
+      .status(401)
+      .json({ success: false, error: "Unauthorized access" });
   }
   next();
 });
 
-// Cron job for refreshing weekly articles
-cron.schedule('1 0 * * 1', async () => {
-  console.log('⏳ Running weekly article generation...');
+// ✅ Weekly Cron Job
+cron.schedule("1 0 * * 1", async () => {
+  console.log("⏳ Running weekly article generation...");
   await refreshWeeklyArticles();
-  console.log('✅ Weekly articles refreshed.');
+  console.log("✅ Weekly articles refreshed.");
 });
 
-// API: Generate satire from a provided title
+// ✅ Routes
+
 app.get("/api/generate", async (req, res) => {
-  try {
-    const title = req.query.title;
-    if (!title) {
-      return res.status(400).json({ success: false, error: "Missing 'title' query parameter" });
-    }
+  const title = req.query.title;
+  if (!title)
+    return res.status(400).json({ success: false, error: "Missing 'title'" });
 
-    const result = await generateSatireStory(title);
-    if (result.error) {
-      return res.status(500).json({ success: false, error: result.message });
-    }
+  const result = await generateSatireStory(title);
+  if (result.error)
+    return res.status(500).json({ success: false, error: result.message });
 
-    res.json({ success: true, ...result });
-
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+  res.json({ success: true, ...result });
 });
 
-// HTML Page: Display random story (with OG tags)
+
+const escapeHtml = (unsafe) =>
+  unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 app.get("/story/random", async (req, res) => {
   try {
     const result = await generateRandomStory();
 
-    if (result.error) {
-      return res.status(500).send("Failed to generate story.");
+    // Check for errors from the generator
+    if (result.error || !result.title || !result.content || !result.paragraphs?.length) {
+      console.warn("⚠️ Incomplete or invalid result from story generator:", result);
+      return res.status(503).send("Sorry, we couldn't generate a story right now.");
     }
 
-    const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>${result.title} | MadeNews</title>
+    const templatePath = path.join(__dirname, "templates", "story.html");
+    let html = fs.readFileSync(templatePath, "utf8");
 
-        <!-- OG Meta -->
-        <meta property="og:title" content="${result.title}" />
-        <meta property="og:description" content="${result.paragraphs?.[0] || 'Generated satire'}" />
-        <meta property="og:image" content="https://made-news-server.onrender.com/assets/app-logo.png" />
-        <meta property="og:type" content="article" />
-
-        <style>
-          body {
-            font-family: sans-serif;
-            padding: 2rem;
-            max-width: 720px;
-            margin: auto;
-            background-color: #fffef5;
-          }
-          h1 {
-            color: #d24c3a;
-          }
-          p {
-            line-height: 1.6;
-            margin-bottom: 1rem;
-          }
-        </style>
-      </head>
-      <body>
-        <h1>${result.title}</h1>
-        ${result.paragraphs.map(p => `<p>${p}</p>`).join('\n')}
-      </body>
-      </html>
-    `;
+    html = html
+      .replace(/{{TITLE}}/g, escapeHtml(result.title))
+      .replace(/{{DESCRIPTION}}/g, escapeHtml(result.paragraphs[0]))
+      .replace(/{{BODY}}/g, result.paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join(""));
 
     res.send(html);
+
   } catch (err) {
-    console.error("❌ Error generating random story:", err.message);
-    res.status(500).send("Failed to generate story.");
+    console.error("❌ Error generating or rendering story:", err.stack);
+    res.status(500).send("Failed to generate story. Please try again later.");
   }
 });
 
-// API: Random satire story as JSON
-app.get("/api/story/random", async (req, res) => {
-  try {
-    const result = await generateRandomStory();
-    if (result.error) {
-      return res.status(500).json({ success: false, error: result.message });
-    }
 
-    res.json({ success: true, ...result });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+app.get("/api/generate/random", async (req, res) => {
+  const result = await generateRandomStory();
+  if (result.error)
+    return res.status(500).json({ success: false, error: result.message });
+
+  res.json({ success: true, ...result });
 });
 
-// API: Return weekly articles from cache or regenerate
 app.get("/api/weeklyArticles", async (req, res) => {
   try {
-    if (!fs.existsSync('./articles.json')) {
+    if (!fs.existsSync("./articles.json")) {
       console.warn("⚠️ articles.json not found. Regenerating...");
       await refreshWeeklyArticles();
     }
 
-    const data = fs.readFileSync('./articles.json', 'utf-8');
+    const data = fs.readFileSync("./articles.json", "utf-8");
     const parsed = JSON.parse(data);
 
-    if (!parsed?.articles || typeof parsed.articles !== 'object' || Object.keys(parsed.articles).length === 0) {
-      console.warn("⚠️ Invalid or empty articles.json. Regenerating...");
+    if (!parsed?.articles || Object.keys(parsed.articles).length === 0) {
+      console.warn("⚠️ Empty or invalid articles.json. Regenerating...");
       await refreshWeeklyArticles();
-      const refreshed = JSON.parse(fs.readFileSync('./articles.json', 'utf-8'));
+      const refreshed = JSON.parse(fs.readFileSync("./articles.json", "utf-8"));
       return res.json({ success: true, ...refreshed });
     }
 
     return res.json({ success: true, ...parsed });
-
   } catch (err) {
-    console.error("❌ Failed to load weekly articles:", err.message);
-    res.status(500).json({ success: false, error: "Unable to load weekly articles." });
+    console.error("❌ Error loading weekly articles:", err.message);
+    res.status(500).json({ success: false, error: "Unable to load articles." });
   }
 });
 
-// Start server
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+
+// ✅ Start server
+app.listen(PORT, () =>
+  console.log(`🚀 Server running at http://localhost:${PORT}`)
+);
