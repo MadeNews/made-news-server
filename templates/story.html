@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/fonts.css" />
+  <title>{{TITLE}} | MadeNews</title>
+
+  <!-- Open Graph Meta -->
+  <meta property="og:title" content="{{TITLE}}" />
+  <meta property="og:description" content="{{DESCRIPTION}}" />
+  <meta property="og:image" content="https://made-news-server.onrender.com/app-logo.png" />
+  <meta property="og:type" content="article" />
+
+</head>
+<body>
+  <h1 id="appHeading">MadeNews, AI Playground</h1>
+
+  <div id="container">
+    <img src="/app-logo.png" id="appLogo"/>
+    <div id="articleContainer">
+      <h2 id="title">{{TITLE}}</h2>
+      <div id="storyArticle">{{BODY}}</div>
+    </div>
+  </div>
+
+  <a href="https://www.instagram.com/madenewscompany/">
+    <img src="/instagram.png" id="instaLink"/>
+  </a>
+
+  <script src="/story.js"></script>
+</body>
+</html>
