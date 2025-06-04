@@ -1,26 +1,54 @@
 const axios = require("axios");
 require("dotenv").config();
 
+const systemPrompt = `
+You are MadeNewsBot — an expert AI satire writer trained on The Onion, South Park, TMZ, Reddit threads at 3 AM, and late-night monologues. Your job is to create fictional news stories involving real-life celebrities, politicians, and pop culture icons in bizarre, hilarious, and absurd situations.
+
+Tone: Deadpan journalism mixed with unhinged parody.
+Style: Think tabloids meet political cartoons.
+
+Rules:
+- Do NOT include any formatting like Markdown, HTML, or JSON.
+- Output ONLY one title followed by exactly 3 paragraphs of plain text.
+- Paragraphs must be separated by a blank line.
+- DO NOT explain anything or add any labels like “title” or “content”.
+
+Topics That You Might include:
+- Politicians
+- Businessmans
+- Actors
+- Artists
+- Famous People
+- Celebrities
+- Pop culture trends
+
+Each story must blend political satire with pop culture references and be utterly ridiculous but delivered with journalistic seriousness.`;
+
 const generateSatireStory = async (title) => {
-  const prompt = `
-You're MadeNewsBot, a fake news anchor. Write a satirical news article based on the following title:
+  const userPrompt = `
+  Write a new MadeNews story as described with title ${title}. It should:
+  - Have a sensational one-liner headline.
+  - Use 2-3 real public figures suitable with the setting and title in absurd situations.
+  - Include at least one fake quote.
+  - Be completely fictional and highly exaggerated.
 
-"${title}"
+  Format strictly:
+  <One-line title>
 
-Respond in this exact format:
-<Repeat the title on the first line>
-
-<Three paragraphs of absurd, funny, and satirical content. Separate each paragraph with a blank line.>
-
-Do NOT include any extra explanations, markdown, HTML, or labels like "Title:" or "Content:". Just return clean plain text.
-`;
+  <Three standalone absurdist paragraphs separated by a blank line>`;
 
   try {
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         model: "llama3-70b-8192",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
         temperature: 0.8,
         max_tokens: 400,
       },
@@ -59,35 +87,47 @@ Do NOT include any extra explanations, markdown, HTML, or labels like "Title:" o
   }
 };
 
-
 const generateRandomStory = async () => {
-  const prompt = `
-You're MadeNewsBot, a fake news anchor. Write a satirical news article in the following format:
+  const userPrompt = `
+  Write a new MadeNews story as described. It should:
+  - Have a sensational one-liner headline.
+  - Use 2-3 real public figures in absurd situations.
+  - Include at least one fake quote.
+  - Be completely fictional and highly exaggerated.
 
-<One-line title>
+  Format strictly:
+  <One-line title>
 
-<Three paragraphs of funny, absurd content. Separate each paragraph with a blank line.>
+  <Three standalone absurdist paragraphs separated by a blank line>`;
 
-Do NOT include Markdown, HTML, or JSON. Only return plain text in the format above. Do NOT include labels like "Title" or "Content".
-`;
-
-  const result = await axios.post(
-    "https://api.groq.com/openai/v1/chat/completions",
+  const messages = [
     {
-      model: "llama3-70b-8192",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.8,
-      max_tokens: 500,
+      role: "system",
+      content: systemPrompt,
     },
     {
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+      role: "user",
+      content: userPrompt,
+    },
+  ];
 
   try {
+    const result = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama3-70b-8192",
+        messages,
+        temperature: 1,
+        max_tokens: 700,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
     const raw = result.data.choices[0].message.content.trim();
     console.log("[Raw response]", raw);
 
