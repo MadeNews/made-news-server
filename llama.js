@@ -26,11 +26,7 @@ Each story must blend political satire with pop culture references and be utterl
 
 const generateSatireStory = async (title) => {
   const userPrompt = `
-  Write a new MadeNews story as described with title ${title}. It should:
-  - Have a sensational one-liner headline.
-  - Use 2-3 real public figures suitable with the setting and title in absurd situations.
-  - Include at least one fake quote.
-  - Be completely fictional and highly exaggerated.
+  Write a new MadeNews story as described with title ${title}. Keep it absurd, fun, and, satirical in nature.
 
   Format strictly:
   <One-line title>
