@@ -1,36 +1,42 @@
-const fs = require('fs')
-const generateSatireStory = require('./llama')
-const categories = require("./categories.json")
+const { generateSatireStory } = require("./llama");
+const categories = require("./categories.json");
+const { saveWeeklyArticles } = require("./services/weeklyPostsStorageServices");
 
 const generateAll = async () => {
+  const categorizedArticles = {};
 
-    const categorizedArticles = {}
+  for (const categoryObject of categories) {
+    const articles = [];
 
-    for (const categoryObject of categories) {
-        const articles = []
+    for (let i = 0; i < 5; i++) {
+      const result = await generateSatireStory(categoryObject.prompt);
 
-        for(i=0;i<5;i++) {
-            const result = await generateSatireStory(categoryObject.prompt)  
-            articles.push({
-                title: result.split('\n').find(line => line.trim() !== '') || 'Untitled',
-                content: result,
-                createdAt: new Date().toISOString(),
-                category: categoryObject.category
-            })  
-        }
-
-        categorizedArticles[categoryObject.category] = articles
+      if (typeof result === "string") {
+        const title = result.split("\n").find((line) => line.trim() !== "") || "Untitled";
+        articles.push({
+          title,
+          content: result,
+          createdAt: new Date().toISOString(),
+          category: categoryObject.category,
+        });
+      } else if (result?.title && result?.paragraphs) {
+        articles.push({
+          title: result.title,
+          content: result.paragraphs.join("\n\n"),
+          createdAt: result.createdAt || new Date().toISOString(),
+          category: categoryObject.category,
+        });
+      } else {
+        console.warn(`⚠️ Skipped a failed story in ${categoryObject.category}`);
+      }
     }
 
-    fs.writeFileSync(
-        './articles.json',
-        JSON.stringify({
-        updatedAt: new Date().toISOString(),
-        articles: categorizedArticles
-        }, null, 2)
-    );
+    categorizedArticles[categoryObject.category] = articles;
+  }
 
-    console.log("Articles Updated Successfully!")
-}
+  await saveWeeklyArticles(categorizedArticles);
+
+  console.log("✅ Weekly articles saved to Firestore!");
+};
 
 module.exports = generateAll;

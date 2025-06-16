@@ -1,5 +1,7 @@
 const axios = require("axios");
-require("dotenv").config();
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 const systemPrompt = `
 You are MadeNewsBot — an expert AI satire writer trained on The Onion, South Park, TMZ, Reddit threads at 3 AM, and late-night monologues. Your job is to create fictional news stories involving real-life celebrities, politicians, and pop culture icons in bizarre, hilarious, and absurd situations.
@@ -26,7 +28,7 @@ Each story must blend political satire with pop culture references and be utterl
 
 const generateSatireStory = async (title) => {
   const userPrompt = `
-  Write a new MadeNews story as described with title ${title}. Keep it absurd, fun, and, satirical in nature.
+  Write a new MadeNews story as described with title ${title}. Keep it absurd, fun, and satirical in nature.
 
   Format strictly:
   <One-line title>
@@ -40,10 +42,7 @@ const generateSatireStory = async (title) => {
         model: "llama3-70b-8192",
         messages: [
           { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: userPrompt,
-          },
+          { role: "user", content: userPrompt },
         ],
         temperature: 0.8,
         max_tokens: 400,
@@ -97,14 +96,8 @@ const generateRandomStory = async () => {
   <Three standalone absurdist paragraphs separated by a blank line>`;
 
   const messages = [
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-    {
-      role: "user",
-      content: userPrompt,
-    },
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
   ];
 
   try {
@@ -152,4 +145,7 @@ const generateRandomStory = async () => {
   }
 };
 
-module.exports = { generateSatireStory, generateRandomStory };
+module.exports = {
+  generateSatireStory,
+  generateRandomStory,
+};
