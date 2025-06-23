@@ -9,5 +9,11 @@
     
     {
         "prompt": "Generate a random article about education system and univerisities. Use any world renowned university as lead example.", "category": "Education"
+    },
+    {
+        "prompt":"Generate a random article about technology, tech people, and tech companies. Use Tech CEOs or other renowed leaders as protagnists", "category": "Technology"
+    },
+    {
+        "prompt":"Generate a fictional news article that explores absurd conspiracy theories involving governments, tech companies, or celebrities. Blend elements of sci-fi, paranoia, and deadpan humor.", "category": "Conspiracies"
     }
 ]
