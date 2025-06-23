@@ -24,6 +24,7 @@ const saveWeeklyArticles = async (articles) => {
   const docRef = db.collection("weekly_posts").doc(weekId);
   await docRef.set({
     articles,
+    updatedAt: new Date().toISOString(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 };

@@ -90,6 +90,8 @@ const generateSatireStory = async (prompt, disallowedTitles = []) => {
   }
 };
 
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 const generateRandomStory = async () => {
   const userPrompt = `
   Write a new MadeNews story as described. It should:
@@ -118,13 +120,22 @@ const generateWeeklyCategoryStories = async (prompt, category, count = 5) => {
         createdAt: result.createdAt,
         category,
       });
+
+      console.log(`✅ Story ${i + 1}/${count} for [${category}] generated.`);
     } else {
       console.warn(`⚠️ Skipped a failed story for category: ${category}`);
+    }
+
+    // 💤 Wait 25 seconds before next request
+    if (i < count - 1) {
+      console.log("⏳ Waiting 5 seconds before next story...");
+      await delay(5000);
     }
   }
 
   return articles;
 };
+
 
 module.exports = {
   generateSatireStory,
