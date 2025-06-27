@@ -9,7 +9,7 @@ router.get("/story/random", async (req, res) => {
   try {
     const result = await generateRandomStory();
 
-    if (result.error || !result.title || !result.content || !result.paragraphs?.length) {
+    if (result.error || !result.title ||!result.paragraphs?.length) {
       console.warn("⚠️ Invalid story result:", result);
       return res.status(503).send("Sorry, story could not be generated.");
     }
