@@ -8,19 +8,27 @@ const getLastWeekDate = () => {
 };
 
 const isNewWeek = (updatedAt) => {
-  const lastDate = new Date(updatedAt);
-  console.log(lastDate)
   const now = new Date();
+  const lastDate = new Date(updatedAt);
+
   const lastWeek = getWeekNumber(lastDate);
   const currentWeek = getWeekNumber(now);
-  return currentWeek !== lastWeek || now.getFullYear() !== lastDate.getFullYear();
+
+  const lastYear = lastDate.getFullYear();
+  const currentYear = now.getFullYear();
+
+  // Only reset on Monday, and only if it's a new week
+  return now.getDay() === 1 && (currentYear !== lastYear || currentWeek !== lastWeek);
 };
 
-function getWeekNumber(d) {
-  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+const getWeekNumber = (date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day); // Move to nearest Thursday
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return weekNo;
+};
+
 
 module.exports = {isNewWeek,getLastWeekDate}
