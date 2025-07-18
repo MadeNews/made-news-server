@@ -1,11 +1,10 @@
 const axios = require("axios");
 const dotenv = require("dotenv");
-
+const {promptManager} = require("./utils/SystemPromptsManager")
 dotenv.config();
 
-const systemPrompt = `
-You are MadeNewsBot — an AI satire specialist trained on edgy Reddit rants, viral meme culture, TMZ-style scoops, and late-night talk show tirades. Your job is to generate satirical news articles that blend rant-style humor with satirical commentary, strictly based on the user's provided title.
 
+const fromatPrompt = `
 Tone: Sarcastic, rant-driven, and sharply satirical.
 Style: Aggressive yet humorous, mimicking the passionate rants of internet meme culture in a news format.
 
@@ -33,6 +32,10 @@ Ensure your response engages meme lovers through passionate yet humorous rants c
 const usedTitles = new Set();
 
 const generateSatireStory = async (prompt, disallowedTitles = []) => {
+
+
+  const systemPrompt = promptManager.getRandomPrompt()
+
   const exclusionText = disallowedTitles.length > 0
     ? `Avoid using any of these topics or people: ${disallowedTitles.join(', ')}.`
     : '';
@@ -54,7 +57,8 @@ const generateSatireStory = async (prompt, disallowedTitles = []) => {
       {
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: fromatPrompt },
+          { role: "system", content: systemPrompt},
           { role: "user", content: userPrompt },
         ],
         temperature: 0.9,
