@@ -85,6 +85,7 @@ const generateSatireStory = async (prompt, disallowedTitles = []) => {
     return {
       title: finalTitle,
       paragraphs,
+      appGenerated: false,
       createdAt: new Date().toISOString(),
     };
   } catch (error) {
