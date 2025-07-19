@@ -124,6 +124,7 @@ const generateWeeklyCategoryStories = async (prompt, category, count = 5) => {
         title: result.title,
         content: result.paragraphs.join("\n\n"),
         createdAt: result.createdAt,
+        appGenerated: true,
         category,
       });
 
