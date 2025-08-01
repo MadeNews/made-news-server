@@ -6,6 +6,8 @@ const db = getFirestore();
 const transporter = require("../config/email");
 const emailVerificationService = require("../services/emailVerificationService");
 const { formatResponse } = require("../utils/formatResponse");
+const dotenv = require("dotenv")
+dotenv.config
 
 router.post("/send-verification", async (req, res) => {
   try {

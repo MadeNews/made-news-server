@@ -1,6 +1,8 @@
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
+const dotenv = require("dotenv");
+dotenv.config()
 
 
 // Create a reusable transporter using environment variables

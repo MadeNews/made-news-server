@@ -7,6 +7,8 @@ const escapeHtml = require("../utils/escapeHtml");
 const { getFirestore } = require("firebase-admin/firestore");
 const db = getFirestore();
 const emailVerificationService = require("../services/emailVerificationService");
+const { dotenv } = require("dotenv");
+dotenv.config()
 
 router.get("/story/random", async (req, res) => {
   try {
@@ -34,6 +36,7 @@ router.get("/story/random", async (req, res) => {
 
 router.get("/verify/:token", async (req, res) => {
     const { token } = req.params;
+    
     if (!token) {
         return res.status(400).json({ success: false, error: "Missing verification token" });
     }
