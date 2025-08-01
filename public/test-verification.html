@@ -1,0 +1,47 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Email Verification</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>Test Email Verification</h1>
+  <form id="verification-form">
+    <label for="uid">User ID:</label>
+    <input type="text" id="uid" name="uid" required>
+    <button type="submit">Send Verification Email</button>
+  </form>
+  <div id="response"></div>
+
+  <script>
+    document.getElementById("verification-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const uid = document.getElementById("uid").value;
+      const responseDiv = document.getElementById("response");
+
+      try {
+        const response = await fetch("/api/email/send-verification", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ uid }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          responseDiv.innerHTML = `<p>Success: ${result.message}</p>`;
+        } else {
+          responseDiv.innerHTML = `<p>Error: ${result.error}</p>`;
+        }
+      } catch (error) {
+        responseDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

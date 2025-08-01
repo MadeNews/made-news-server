@@ -4,6 +4,9 @@ const path = require("path");
 const fs = require("fs");
 const { generateRandomStory } = require("../llama");
 const escapeHtml = require("../utils/escapeHtml");
+const { getFirestore } = require("firebase-admin/firestore");
+const db = getFirestore();
+const emailVerificationService = require("../services/emailVerificationService");
 
 router.get("/story/random", async (req, res) => {
   try {
@@ -27,6 +30,21 @@ router.get("/story/random", async (req, res) => {
     console.error("❌ Error rendering story:", err);
     res.status(500).send("Error generating story.");
   }
+});
+
+router.get("/verify/:token", async (req, res) => {
+    const { token } = req.params;
+    if (!token) {
+        return res.status(400).json({ success: false, error: "Missing verification token" });
+    }
+
+    try {
+        const result = await emailVerificationService.verifyEmail(token);
+        res.send(result)
+    } catch (error) {
+        console.error("Error verifying email:", error);
+        res.status(500).json({ success: false, error: "Failed to verify email" });
+    }
 });
 
 module.exports = router;

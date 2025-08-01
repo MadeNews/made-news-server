@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   "/app-logo.png",
   "/instagram.png",
   "/favicon.ico",
+  "/verify"
 ];
 
 module.exports = (req, res, next) => {

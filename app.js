@@ -18,6 +18,8 @@ app.use(authMiddleware);
 
 // Routes
 app.use(publicRoutes); // Should be above auth-protected
+const emailRoutes = require("./routes/emailRoutes");
+app.use("/api/email", emailRoutes);
 app.use("/api", apiRoutes);
 
 // Cron job
