@@ -38,7 +38,7 @@ router.get("/is-verified/:uid", async (req, res) => {
     res.json(formatResponse(true,"user is verified",isVerified));
   } catch (error) {
     console.error("Error checking verification status:", error);
-    res.status(500).json(formatResponse(false,error.message));
+    res.status(500).json(formatResponse(false,error.message,null));
   }
 });
 

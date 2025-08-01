@@ -211,7 +211,7 @@ async isUserVerified(userId) {
     const userDoc = await this.db.collection("users").doc(userId).get();
 
     if (!userDoc.exists) {
-      return false;
+      throw new Error("User Not Fount with Id: "+userId);
     }
 
     const userData = userDoc.data();
@@ -225,10 +225,12 @@ async isUserVerified(userId) {
         await verificationDocRef.delete();
         console.log(`Cleaned up verification record for user: ${userId}`);
       }
+
+      return true
     }
 
-    return userData.emailVerified || false;
-    
+    return false
+
   } catch (error) {
     console.error("Error checking user verification status:", error);
     throw new Error(error || "Failed to check User Verification Status")
