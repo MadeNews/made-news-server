@@ -35,21 +35,18 @@ const db = getFirestore();
 
 router.get("/weeklyArticles", async (_req, res) => {
   try {
-
-    console.log("Trying to acces firebase for week: "+ getCurrentWeekId())
+    console.log("Trying to access firebase for week: " + getCurrentWeekId());
 
     const data = await getWeeklyArticles(getCurrentWeekId());
 
+    // If data is fresh, return immediately
     if (data && data.updatedAt && !isNewWeek(data.updatedAt)) {
       return res.json({ success: true, articles: data.articles });
     }
 
+    console.log("Data was not found or is outdated. Regenerating and providing fallback...");
 
-    console.log("Data was not found or is outdated. regenerating and providing fallback...");
-
-    console.log("Fetching last week's articles: "+getLastWeekId());
-    // If no data or outdated, provide fallback
-    // Serve fallback (last week's) data
+    // Serve fallback data (last week's)
     const fallbackData = await getWeeklyArticles(getLastWeekId());
     res.json({
       success: true,
@@ -57,53 +54,47 @@ router.get("/weeklyArticles", async (_req, res) => {
       info: "⚠️ New stories are cooking. Showing last week’s content for now.",
     });
 
-    // Try to acquire refresh lock
-    const lockRef = db.collection("locks").doc("weeklyRefresh");
-    const lockDoc = await lockRef.get();
-    const now = Date.now();
+    // Run background task after response is sent
+    setImmediate(async () => {
+      try {
+        const lockRef = db.collection("locks").doc("weeklyRefresh");
+        const lockDoc = await lockRef.get();
+        const now = Date.now();
 
-    if (lockDoc.exists) {
-      const lockData = lockDoc.data();
+        if (
+          lockDoc.exists &&
+          lockDoc.data().isRefreshing &&
+          now - lockDoc.data().timestamp < 10 * 60 * 1000
+        ) {
+          console.log("⏳ Regeneration already in progress. Skipping.");
+          return;
+        }
 
-      // Skip regeneration if another process is refreshing and it's recent (<10 min)
-      if (lockData.isRefreshing && now - lockData.timestamp < 10 * 60 * 1000) {
-        console.log("⏳ Regeneration already in progress. Skipping.");
-        return;
-      }
-    }
+        // Acquire lock
+        await lockRef.set({
+          isRefreshing: true,
+          timestamp: now,
+        });
 
-    // Set lock
-    await lockRef.set({
-      isRefreshing: true,
-      timestamp: now
-    });
-
-    // Start background generation
-    refreshWeeklyArticles()
-      .then(async () => {
+        // Refresh data
+        await refreshWeeklyArticles();
         console.log("✅ New weekly articles updated in background.");
-
-        // Release the lock
-        await lockRef.set({
-          isRefreshing: false,
-          timestamp: Date.now()
-        });
-      })
-      .catch(async (err) => {
+      } catch (err) {
         console.error("❌ Background generation failed:", err.message);
-
-        // Optionally release the lock on failure
-        await lockRef.set({
+      } finally {
+        // Release lock
+        await db.collection("locks").doc("weeklyRefresh").set({
           isRefreshing: false,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
-      });
-
+      }
+    });
   } catch (err) {
     console.error("❌ Error accessing Firestore:", err.message);
     res.status(500).json({ success: false, error: "Unable to load articles." });
   }
 });
+
 
 
 
