@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const cronJob = require("./cron/weeklyJob");
 const apiRoutes = require("./routes/apiRoutes");
 const publicRoutes = require("./routes/publicRoutes");
 const authMiddleware = require("./middleware/authMiddleware");
@@ -22,7 +21,5 @@ const emailRoutes = require("./routes/emailRoutes");
 app.use("/api/email", emailRoutes);
 app.use("/api", apiRoutes);
 
-// Cron job
-cronJob();
 
 module.exports = app;

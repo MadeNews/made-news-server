@@ -1,11 +1,11 @@
 const serverless = require("serverless-http");
-const app = require("../app"); // import your express app
+const app = require("../app");
 
-// Wrap the Express app in serverless-http for Vercel
-module.exports = serverless(app);
+const handler = serverless(app);
 
-// Vercel background function config
+module.exports = handler;
+
 module.exports.config = {
-  runtime: "nodejs",  // Node.js runtime
-  maxDuration: 600    // Allow up to 10 min for background tasks
+  runtime: "nodejs18.x", // Node runtime (specify the exact version)
+  maxDuration: 600       // Max duration (10 minutes)
 };
