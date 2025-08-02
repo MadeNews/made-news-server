@@ -7,7 +7,7 @@ const escapeHtml = require("../utils/escapeHtml");
 const { getFirestore } = require("firebase-admin/firestore");
 const db = getFirestore();
 const emailVerificationService = require("../services/emailVerificationService");
-const { dotenv } = require("dotenv");
+const dotenv = require("dotenv");
 dotenv.config()
 
 router.get("/story/random", async (req, res) => {

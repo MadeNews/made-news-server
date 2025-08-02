@@ -29,8 +29,7 @@ const saveWeeklyArticles = async (articles) => {
   });
 };
 
-const getWeeklyArticles = async () => {
-  const weekId = getCurrentWeekId();
+const getWeeklyArticles = async (weekId) => {
   const docRef = db.collection("weekly_posts").doc(weekId);
   const snapshot = await docRef.get();
   return snapshot.exists ? snapshot.data() : null;

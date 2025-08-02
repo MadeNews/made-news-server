@@ -1,11 +1,19 @@
 
-const getLastWeekDate = () => {
+const getLastWeekId = () => {
   const now = new Date();
   now.setDate(now.getDate() - 7); // Move back one week
   const year = now.getFullYear();
   const week = Math.ceil((((now - new Date(year, 0, 1)) / 86400000) + new Date(year, 0, 1).getDay() + 1) / 7);
   return `${year}-${String(week).padStart(2, "0")}`;
 };
+
+const getCurrentWeekId = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const week = Math.ceil((((now - new Date(year, 0, 1)) / 86400000) + new Date(year, 0, 1).getDay() + 1) / 7);
+  return `${year}-${String(week).padStart(2, "0")}`;
+};
+
 
 const isNewWeek = (updatedAt) => {
   const now = new Date();
@@ -31,4 +39,4 @@ const getWeekNumber = (date) => {
 };
 
 
-module.exports = {isNewWeek,getLastWeekDate}
+module.exports = {isNewWeek,getLastWeekId,getCurrentWeekId}

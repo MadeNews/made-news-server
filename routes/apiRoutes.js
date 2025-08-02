@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
-
 const { generateSatireStory, generateRandomStory } = require("../llama"); // Adjust path if needed
 const refreshWeeklyArticles = require("../refreshWeekly");
 const {
   getWeeklyArticles,
   saveWeeklyArticles,
 } = require("../services/weeklyPostsStorageServices");
+
+const { isNewWeek, getLastWeekId,getCurrentWeekId } = require("../utils/dateHelpers");
 
 router.get("/generate", async (req, res) => {
   const title = req.query.title;
@@ -28,21 +29,28 @@ router.get("/generate/random", async (_req, res) => {
   res.json({ success: true, ...result });
 });
 
-const { isNewWeek, getLastWeekDate } = require("../utils/dateHelpers");
 
 const { getFirestore } = require("firebase-admin/firestore");
 const db = getFirestore();
 
 router.get("/weeklyArticles", async (_req, res) => {
   try {
-    const data = await getWeeklyArticles();
+
+    console.log("Trying to acces firebase for week: "+ getCurrentWeekId())
+
+    const data = await getWeeklyArticles(getCurrentWeekId());
 
     if (data && data.updatedAt && !isNewWeek(data.updatedAt)) {
       return res.json({ success: true, articles: data.articles });
     }
 
+
+    console.log("Data was not found or is outdated. regenerating and providing fallback...");
+
+    console.log("Fetching last week's articles: "+getLastWeekId());
+    // If no data or outdated, provide fallback
     // Serve fallback (last week's) data
-    const fallbackData = await getWeeklyArticles(getLastWeekDate());
+    const fallbackData = await getWeeklyArticles(getLastWeekId());
     res.json({
       success: true,
       articles: fallbackData?.articles || {},
