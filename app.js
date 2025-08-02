@@ -22,7 +22,5 @@ const emailRoutes = require("./routes/emailRoutes");
 app.use("/api/email", emailRoutes);
 app.use("/api", apiRoutes);
 
-// Cron job
-cronJob();
 
 module.exports = app;
