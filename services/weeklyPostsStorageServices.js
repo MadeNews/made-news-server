@@ -12,16 +12,8 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-const getCurrentWeekId = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const week = Math.ceil((((now - new Date(year, 0, 1)) / 86400000) + new Date(year, 0, 1).getDay() + 1) / 7);
-  return `${year}-${String(week).padStart(2, "0")}`;
-};
-
 const saveWeeklyArticles = async (articles) => {
-  const weekId = getCurrentWeekId();
-  const docRef = db.collection("weekly_posts").doc(weekId);
+  const docRef = db.collection("weekly_posts").doc("weekly_posts");
   await docRef.set({
     articles,
     updatedAt: new Date().toISOString(),
@@ -29,8 +21,8 @@ const saveWeeklyArticles = async (articles) => {
   });
 };
 
-const getWeeklyArticles = async (weekId) => {
-  const docRef = db.collection("weekly_posts").doc(weekId);
+const getWeeklyArticles = async () => {
+  const docRef = db.collection("weekly_posts").doc("weekly_posts");
   const snapshot = await docRef.get();
   return snapshot.exists ? snapshot.data() : null;
 };

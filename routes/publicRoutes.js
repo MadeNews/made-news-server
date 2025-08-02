@@ -8,6 +8,7 @@ const { getFirestore } = require("firebase-admin/firestore");
 const db = getFirestore();
 const emailVerificationService = require("../services/emailVerificationService");
 const dotenv = require("dotenv");
+const refreshWeekly = require("../refreshWeekly");
 dotenv.config()
 
 router.get("/story/random", async (req, res) => {
@@ -32,6 +33,11 @@ router.get("/story/random", async (req, res) => {
     console.error("❌ Error rendering story:", err);
     res.status(500).send("Error generating story.");
   }
+});
+
+router.get("/refreshWeekly", async (req, res) => {
+  await refreshWeekly();
+  res.status(200).json({ success: true });
 });
 
 router.get("/verify/:token", async (req, res) => {

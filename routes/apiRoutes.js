@@ -36,73 +36,19 @@ const db = getFirestore();
 router.get("/weeklyArticles", async (_req, res) => {
   try {
 
-    console.log("Trying to acces firebase for week: "+ getCurrentWeekId())
+    const data = await getWeeklyArticles();
 
-    const data = await getWeeklyArticles(getCurrentWeekId());
-
-    if (data && data.updatedAt && !isNewWeek(data.updatedAt)) {
+    if (data) {
       return res.json({ success: true, articles: data.articles });
+    } else {
+      return res.status(404).json({ success: false, error: "No weekly articles found." });
     }
-
-
-    console.log("Data was not found or is outdated. regenerating and providing fallback...");
-
-    console.log("Fetching last week's articles: "+getLastWeekId());
-    // If no data or outdated, provide fallback
-    // Serve fallback (last week's) data
-    const fallbackData = await getWeeklyArticles(getLastWeekId());
-    res.json({
-      success: true,
-      articles: fallbackData?.articles || {},
-      info: "⚠️ New stories are cooking. Showing last week’s content for now.",
-    });
-
-    // Try to acquire refresh lock
-    const lockRef = db.collection("locks").doc("weeklyRefresh");
-    const lockDoc = await lockRef.get();
-    const now = Date.now();
-
-    if (lockDoc.exists) {
-      const lockData = lockDoc.data();
-
-      // Skip regeneration if another process is refreshing and it's recent (<10 min)
-      if (lockData.isRefreshing && now - lockData.timestamp < 10 * 60 * 1000) {
-        console.log("⏳ Regeneration already in progress. Skipping.");
-        return;
-      }
-    }
-
-    // Set lock
-    await lockRef.set({
-      isRefreshing: true,
-      timestamp: now
-    });
-
-    // Start background generation
-    refreshWeeklyArticles()
-      .then(async () => {
-        console.log("✅ New weekly articles updated in background.");
-
-        // Release the lock
-        await lockRef.set({
-          isRefreshing: false,
-          timestamp: Date.now()
-        });
-      })
-      .catch(async (err) => {
-        console.error("❌ Background generation failed:", err.message);
-
-        // Optionally release the lock on failure
-        await lockRef.set({
-          isRefreshing: false,
-          timestamp: Date.now()
-        });
-      });
 
   } catch (err) {
     console.error("❌ Error accessing Firestore:", err.message);
     res.status(500).json({ success: false, error: "Unable to load articles." });
   }
+
 });
 
 
