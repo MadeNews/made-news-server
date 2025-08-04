@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const categories = require("../categories.json");
-const { saveWeeklyArticles } = require("./services/weeklyPostsStorageServices");
-const { generateWeeklyCategoryStories } = require("./llama");
+const categories = require("../");
+const { saveWeeklyArticles } = require("../services/weeklyPostsStorageServices");
+const { generateWeeklyCategoryStories } = require("../llama");
 
 router.get("/refreshWeekly", async (_req, res) => {
   try {
