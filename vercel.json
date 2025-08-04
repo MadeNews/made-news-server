@@ -5,11 +5,5 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "server.js" }
-  ],
-  "crons": [
-    {
-      "path": "/refreshWeekly",
-      "schedule": "0 0 * * 1"
-    }
   ]
 } 
