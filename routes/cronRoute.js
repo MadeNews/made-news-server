@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const categories = require("./categories.json");
+const categories = require("../categories.json");
 const { saveWeeklyArticles } = require("./services/weeklyPostsStorageServices");
 const { generateWeeklyCategoryStories } = require("./llama");
 
