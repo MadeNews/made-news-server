@@ -100,7 +100,7 @@ Format strictly:
     };
 
     // Only include satireType if provided
-    if (satireType) response.satireType = satireType;
+    if (satireType) response.satireStyle = satireType;
 
     return response;
   } catch (error) {
