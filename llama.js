@@ -42,7 +42,6 @@ const generateSatireStory = async (
     ? promptManager.getPromptById(satireType)
     : promptManager.getRandomPrompt();
 
-    console.log(systemPrompt)
 
 
   const exclusionText =
@@ -68,7 +67,7 @@ Format strictly:
         model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: formatPrompt },
-          { role: "system", content: systemPrompt },
+          { role: "system", content: systemPrompt.prompt },
           { role: "user", content: userPrompt },
         ],
         temperature: 0.9,
@@ -97,7 +96,7 @@ Format strictly:
       paragraphs,
       appGenerated: false,
       createdAt: new Date().toISOString(),
-      satireStyle: satireType || null,
+      satireStyle: systemPrompt.id || null,
     };
 
     return response;
