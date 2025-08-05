@@ -1,10 +1,9 @@
 const axios = require("axios");
 const dotenv = require("dotenv");
-const {promptManager} = require("./utils/SystemPromptsManager")
+const { promptManager } = require("./utils/SystemPromptsManager");
 dotenv.config();
 
-
-const fromatPrompt = `
+const formatPrompt = `
 Tone: Sarcastic, rant-driven, and sharply satirical.
 Style: Aggressive yet humorous, mimicking the passionate rants of internet meme culture in a news format.
 
@@ -26,30 +25,41 @@ Topics You Might Include (only if the user's input explicitly suggests):
 
 Ensure your response engages meme lovers through passionate yet humorous rants clearly derived from and centered around the user's specific scenario or title.`;
 
-
 // === TRACK USED TITLES IN-MEMORY ===
 // Replace with Firestore or Redis for persistence across sessions
 const usedTitles = new Set();
 
-const generateSatireStory = async (prompt, disallowedTitles = []) => {
+const generateSatireStory = async (
+  prompt,
+  disallowedTitles = [],
+  satireType = null
+) => {
+  // Ensure disallowedTitles is always an array
+  disallowedTitles = Array.isArray(disallowedTitles) ? disallowedTitles : [];
+
+  // Choose the appropriate system prompt
+  const systemPrompt = satireType
+    ? promptManager.getPromptById(satireType)
+    : promptManager.getRandomPrompt();
+
+    console.log(systemPrompt)
 
 
-  const systemPrompt = promptManager.getRandomPrompt()
-
-  const exclusionText = disallowedTitles.length > 0
-    ? `Avoid using any of these topics or people: ${disallowedTitles.join(', ')}.`
-    : '';
+  const exclusionText =
+    disallowedTitles.length > 0
+      ? `Avoid using any of these topics or people: ${disallowedTitles.join(", ")}.`
+      : "";
 
   const userPrompt = `
-  ${prompt}
+${prompt}
 
-  ${exclusionText}
+${exclusionText}
 
-  Format strictly:
-  <One-line title>
+Format strictly:
+<One-line title>
 
-  <Three standalone absurdist paragraphs separated by a blank line>
-  `;
+<Three standalone absurdist paragraphs separated by a blank line>
+`;
 
   try {
     const result = await axios.post(
@@ -57,8 +67,8 @@ const generateSatireStory = async (prompt, disallowedTitles = []) => {
       {
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: fromatPrompt },
-          { role: "system", content: systemPrompt},
+          { role: "system", content: formatPrompt },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
         temperature: 0.9,
@@ -82,12 +92,17 @@ const generateSatireStory = async (prompt, disallowedTitles = []) => {
       throw new Error("Incomplete model response");
     }
 
-    return {
+    const response = {
       title: finalTitle,
       paragraphs,
       appGenerated: false,
       createdAt: new Date().toISOString(),
     };
+
+    // Only include satireType if provided
+    if (satireType) response.satireType = satireType;
+
+    return response;
   } catch (error) {
     console.error("Failed to generate satire:", error.message);
     return {
@@ -97,7 +112,7 @@ const generateSatireStory = async (prompt, disallowedTitles = []) => {
   }
 };
 
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const generateRandomStory = async () => {
   const userPrompt = `
@@ -143,7 +158,6 @@ const generateWeeklyCategoryStories = async (prompt, category, count = 5) => {
 
   return articles;
 };
-
 
 module.exports = {
   generateSatireStory,

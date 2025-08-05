@@ -7,19 +7,41 @@ const {
   saveWeeklyArticles,
 } = require("../services/weeklyPostsStorageServices");
 
-const { isNewWeek, getLastWeekId,getCurrentWeekId } = require("../utils/dateHelpers");
-
 router.get("/generate", async (req, res) => {
+  console.log(">>> /generate hit");
+  console.log("Query:", req.query);
+
   const title = req.query.title;
-  if (!title)
+  const satireName = req.query.satireName || null;
+
+  if (!title) {
+    console.log("❌ Title missing");
     return res.status(400).json({ success: false, error: "Missing 'title'" });
+  }
 
-  const result = await generateSatireStory(title);
-  if (result.error)
-    return res.status(500).json({ success: false, error: result.message });
+  let result;
 
-  res.json({ success: true, ...result });
+  try {
+    if (satireName != null) {
+      result = await generateSatireStory(title, [], satireName);
+    } else {
+      result = await generateSatireStory(title, []);
+    }
+
+    if (result?.error) {
+      console.log("❌ LLM returned error:", result.message);
+      return res.status(500).json({ success: false, error: result.message });
+    }
+
+    console.log("✅ Success");
+    res.json({ success: true, ...result });
+
+  } catch (err) {
+    console.log("❌ Internal error:", err);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
 });
+
 
 router.get("/generate/random", async (_req, res) => {
   const result = await generateRandomStory();
@@ -28,10 +50,6 @@ router.get("/generate/random", async (_req, res) => {
 
   res.json({ success: true, ...result });
 });
-
-
-const { getFirestore } = require("firebase-admin/firestore");
-const db = getFirestore();
 
 router.get("/weeklyArticles", async (_req, res) => {
   try {
@@ -50,7 +68,5 @@ router.get("/weeklyArticles", async (_req, res) => {
   }
 
 });
-
-
 
 module.exports = router;
