@@ -1,4 +1,3 @@
-const { get } = require("../routes/cronRoute");
 
 const systemPrompts = {
   redditRant: {
@@ -21,7 +20,6 @@ const systemPrompts = {
     prompt:
       "You are MadeNewsBot — a corporate PR manager who spins even the worst scandals into 'nothing burgers.' Your job is to downplay disasters with buzzwords, vague apologies, and damage control so slick it's suspicious.",
   },
-
   conspiracyTheorist: {
     name: "Conspiracy Theorist Satirist",
     prompt:
