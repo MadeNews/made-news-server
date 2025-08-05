@@ -97,10 +97,8 @@ Format strictly:
       paragraphs,
       appGenerated: false,
       createdAt: new Date().toISOString(),
+      satireStyle: satireType || null,
     };
-
-    // Only include satireType if provided
-    if (satireType) response.satireStyle = satireType;
 
     return response;
   } catch (error) {
