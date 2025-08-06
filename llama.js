@@ -43,8 +43,7 @@ const generateSatireStory = async (
     : promptManager.getRandomPrompt();
 
 
-
-  const exclusionText =
+    const exclusionText =
     disallowedTitles.length > 0
       ? `Avoid using any of these topics or people: ${disallowedTitles.join(", ")}.`
       : "";

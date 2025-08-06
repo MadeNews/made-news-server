@@ -14,6 +14,8 @@ router.get("/generate", async (req, res) => {
   const title = req.query.title;
   const satireName = req.query.satireStyle || null;
 
+
+
   if (!title) {
     console.log("❌ Title missing");
     return res.status(400).json({ success: false, error: "Missing 'title'" });

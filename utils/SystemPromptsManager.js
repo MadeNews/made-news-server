@@ -123,16 +123,8 @@ getRandomPrompt() {
   return selectedPrompt; // ✅ return only the prompt string
 }
 
-
-  getPromptByName(name) {
-    const entry = this.promptEntries.find(([_, p]) =>
-      p.name.toLowerCase() === name.toLowerCase()
-    );
-    return entry ? entry[1].prompt : null;
-  }
-
   getPromptById(id) {
-    return this.prompts[id]?.prompt || null;
+    return this.prompts[id] || null;
   }
 
   resetHistory() {
@@ -159,5 +151,4 @@ module.exports = {
   promptManager,
   getRandomPrompt: () => promptManager.getRandomPrompt(),
   getPromptById: (id) => promptManager.getPromptById(id),
-  getPromptByName: (name) => promptManager.getPromptByName(name),
 };
