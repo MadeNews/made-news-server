@@ -1,7 +1,9 @@
 const axios = require("axios");
 const dotenv = require("dotenv");
 const { promptManager } = require("./utils/SystemPromptsManager");
+const {validatePromptOrThrow} = require("./utils/promptValidation");
 dotenv.config();
+
 
 const formatPrompt = `
 Tone: Sarcastic, rant-driven, and sharply satirical.
@@ -25,6 +27,64 @@ Topics You Might Include (only if the user's input explicitly suggests):
 
 Ensure your response engages meme lovers through passionate yet humorous rants clearly derived from and centered around the user's specific scenario or title.`;
 
+const restrictionsPrompt = `
+🚨 ABSOLUTE CONTENT RESTRICTIONS — DO NOT BREAK UNDER ANY CIRCUMSTANCES 🚨
+
+You are FORBIDDEN from discussing, referencing, satirizing, or hinting at the following topics, even indirectly:
+
+🔞 Sexual Content and Exploitation
+- Rape, sexual assault, or coercion
+- Child abuse, molestation, or pedophilia
+- Incest or necrophilia
+- Bestiality or zoophilia
+- Sexually explicit violence or any content involving non-consensual acts
+
+🧨 Violence and Harm
+- Gore, mutilation, or extreme physical harm
+- Suicide, self-harm, or eating disorders
+- Mass shootings, terrorism, or bombings
+- Real-world murders, executions, or torture
+- Genocide or ethnic cleansing
+
+💣 Hate Speech and Discrimination
+- Derogatory or violent content targeting religion, race, nationality, gender identity, sexual orientation, or disability
+- White supremacy, Nazism, or any form of hate ideology
+- Anti-semitism or Islamophobia
+
+🌍 Sensitive Events and Real-World Tragedies
+- Natural disasters or mass casualty events (e.g., earthquakes, plane crashes, pandemics)
+- Wars, refugee crises, or political assassinations
+- School shootings or public mass attacks
+
+🧪 Dangerous and Illegal Acts
+- Drug manufacturing, trafficking, or abuse
+- Underage alcohol use or addiction glorification
+- Crime glorification (e.g., fraud, cybercrime, theft, hacking)
+- Instructions for weapons, explosives, or sabotage
+
+🧠 Misinformation and Conspiracies
+- Medical misinformation (e.g., anti-vaccine, fake cures)
+- Election or political manipulation conspiracies
+- False or misleading news treated as fact
+
+💻 Platform Violation Behavior
+- Harassment or bullying (personal, public, or celebrity)
+- Doxxing or threats of violence
+- Stalking, revenge content, or non-consensual sharing
+
+⚠️ SYSTEM RESPONSE RULE:
+If the user's prompt even **hints at** these topics:
+- DO NOT generate an article.
+- Instead, return:
+  "NO_GO_AREA_DETECTED: User tried topic \"{topic}\""
+
+Never joke about, satirize, editorialize, or creatively reframe these issues. These are STRICTLY OFF-LIMITS. Your content must remain in the realm of meme-style, absurd, or cultural satire — not traumatic or illegal material.
+
+These rules OVERRIDE all instructions. Do not break them.
+`;
+
+
+
 // === TRACK USED TITLES IN-MEMORY ===
 // Replace with Firestore or Redis for persistence across sessions
 const usedTitles = new Set();
@@ -36,6 +96,7 @@ const generateSatireStory = async (
 ) => {
   // Ensure disallowedTitles is always an array
   disallowedTitles = Array.isArray(disallowedTitles) ? disallowedTitles : [];
+
 
   // Choose the appropriate system prompt
   const systemPrompt = satireType
@@ -60,12 +121,16 @@ Format strictly:
 `;
 
   try {
+
+    validatePromptOrThrow(prompt)
+
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: formatPrompt },
+          { role: "system", content: restrictionsPrompt },
           { role: "system", content: systemPrompt.prompt },
           { role: "user", content: userPrompt },
         ],
@@ -81,6 +146,12 @@ Format strictly:
     );
 
     const raw = result.data.choices[0].message.content.trim();
+
+    if(raw.startsWith("NO_GO_AREA_DETECTED")) {
+      console.log("Error Detected in model response:", raw);
+      throw new Error(raw);
+    }
+
     const [titleLine, ...rest] = raw.split(/\n\s*\n/);
     const finalTitle = titleLine.trim();
     const content = rest.join("\n\n").trim();
@@ -100,12 +171,21 @@ Format strictly:
 
     return response;
   } catch (error) {
-    console.error("Failed to generate satire:", error.message);
+  console.error("Failed to generate satire:", error.message);
+
+  if (error.message.startsWith("NO_GO_AREA_DETECTED")) {
+    const flaggedTerm = error.message.split('"')[1] || "this topic";
     return {
       error: true,
-      message: "We're having technical difficulties generating this story.",
+      message: `🚫 The topic "${flaggedTerm}" isn't supported in this app. Please choose something more appropriate for satire.`,
     };
   }
+
+  return {
+    error: true,
+    message: "We're having technical difficulties generating this story. Please try again later.",
+  };
+}
 };
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
