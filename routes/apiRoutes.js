@@ -8,8 +8,6 @@ const {
 } = require("../services/weeklyPostsStorageServices");
 
 router.get("/generate", async (req, res) => {
-  console.log(">>> /generate hit");
-  console.log("Query:", req.query);
 
   const title = req.query.title;
   const satireName = req.query.satireStyle || null;
