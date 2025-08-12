@@ -1,28 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MadeNews - Your Daily Dose of Sarcastic Reality</title>
-    <meta
-      name="description"
-      content="Transform real-world topics into witty satirical articles. The news so fake, it feels real."
-    />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Open Graph Tags -->
-    <meta
-      property="og:title"
-      content="MadeNews - Your Daily Dose of Sarcastic Reality"
-    />
-    <meta
-      property="og:description"
-      content="AI-powered satirical news generator that turns reality into comedy gold"
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://madenews.app" />
+  <!-- Primary Meta Tags -->
+  <title>MadeNews | AI Satirical News Generator - Daily Dose of Sarcastic Reality</title>
+  <meta name="description" content="MadeNews is an AI-powered satirical news app that transforms trending topics into witty, sarcastic articles. Download now and twist reality into comedy gold." />
+  <link rel="canonical" href="https://madenews.app" />
 
-    <link rel="stylesheet" href="styles.css" />
-  </head>
+  <!-- Open Graph -->
+  <meta property="og:title" content="MadeNews - Your Daily Dose of Sarcastic Reality" />
+  <meta property="og:description" content="Transform trending topics into hilarious AI-generated satirical news. The news so fake, it feels real." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://madenews.app" />
+  <meta property="og:image" content="https://madenews.app/images/madenews-preview.jpg" />
+  <meta property="og:site_name" content="MadeNews" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MadeNews - AI Satirical News Generator" />
+  <meta name="twitter:description" content="Your AI-powered source for sarcastic, witty news articles. Reality with a twist." />
+  <meta name="twitter:image" content="https://madenews.app/images/madenews-preview.jpg" />
+
+  <!-- App Schema Markup -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MobileApplication",
+    "name": "MadeNews",
+    "operatingSystem": "Android",
+    "applicationCategory": "NewsApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "downloadUrl": "https://madenews.app/madenews.apk",
+    "description": "AI-powered satirical news generator turning real-world topics into comedy gold."
+  }
+  </script>
+
+<link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="styles.css"></noscript>
+
+</head>
+
   <body>
     <!-- News Ticker -->
     <div class="news-ticker">
@@ -271,6 +294,6 @@
       </div>
     </section>
 
-    <script src="script.js"></script>
+    <script src="script.js" defer></script>
   </body>
 </html>

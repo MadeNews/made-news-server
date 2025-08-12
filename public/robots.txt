@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://made-news-app-server.vercel.app/sitemap.xml
