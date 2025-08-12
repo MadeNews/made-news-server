@@ -14,11 +14,15 @@
     "@tensorflow-models/toxicity": "^1.2.2",
     "@tensorflow/tfjs": "^4.22.0",
     "axios": "^1.9.0",
+    "clean-css": "^5.3.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
+    "html-minifier-terser": "^7.2.0",
     "node-cron": "^4.0.7",
-    "nodemailer": "^7.0.5"
+    "nodemailer": "^7.0.5",
+    "terser": "^5.43.1"
   }
 }

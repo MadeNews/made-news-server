@@ -19,11 +19,7 @@ document.addEventListener("DOMContentLoaded", function () {
   document
     .querySelectorAll(".step, .style-card, .testimonial")
     .forEach((el, index) => {
-      el.style.opacity = "0";
-      el.style.transform = "translateY(50px)";
-      el.style.transition = `opacity 0.8s ease ${
-        index * 0.1
-      }s, transform 0.8s ease ${index * 0.1}s`;
+      el.style.transition = `opacity 0.8s ease ${index * 0.1}s, transform 0.8s ease ${index * 0.1}s`; // Set staggered transition only
       observer.observe(el);
     });
 
@@ -41,10 +37,10 @@ document.addEventListener("DOMContentLoaded", function () {
       ripple.style.animation = "ripple 0.6s linear";
       ripple.style.left = "50%";
       ripple.style.top = "50%";
-      ripple.style.width = ripple.style.height = "100px";
-      ripple.style.marginLeft = ripple.style.marginTop = "-50px";
+      const size = Math.max(this.offsetWidth, this.offsetHeight) * 2; // Dynamic sizing
+      ripple.style.width = ripple.style.height = `${size}px`;
+      ripple.style.marginLeft = ripple.style.marginTop = `-${size / 2}px`;
 
-      this.style.position = "relative";
       this.appendChild(ripple);
 
       setTimeout(() => {
