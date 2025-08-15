@@ -134,8 +134,9 @@ Format strictly:
           { role: "system", content: systemPrompt.prompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.9,
-        max_tokens: 600,
+        temperature: 0.8,
+        top_p: 0.9,
+        max_tokens: 1000,
       },
       {
         headers: {
