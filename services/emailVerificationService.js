@@ -16,7 +16,7 @@ const transporter = nodemailer.createTransport({
 
 // JWT secret for verification tokens
 const JWT_SECRET =
-  process.env.JWT_SECRET || "your-super-secret-jwt-key-change-this";
+  process.env.JWT_SECRET
 
 class EmailVerificationService {
   constructor() {

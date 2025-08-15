@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { generateSatireStory, generateRandomStory } = require("../llama"); // Adjust path if needed
+const { generateSatireStory, generateRandomStory } = require("../services/SatireService"); // Adjust path if needed
 const refreshWeeklyArticles = require("../refreshWeekly");
 const {
   getWeeklyArticles,

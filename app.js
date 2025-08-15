@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const apiRoutes = require("./routes/apiRoutes");
+const apiRoutes = require("./routes/newsRoutes");
 const publicRoutes = require("./routes/publicRoutes");
 const authMiddleware = require("./middleware/authMiddleware");
 

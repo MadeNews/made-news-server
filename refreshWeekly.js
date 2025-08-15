@@ -1,6 +1,6 @@
 const categories = require("./categories.json");
 const { saveWeeklyArticles } = require("./services/weeklyPostsStorageServices");
-const { generateWeeklyCategoryStories } = require("./llama");
+const { generateWeeklyCategoryStories } = require("./services/SatireService");
 
 const generateAll = async () => {
 

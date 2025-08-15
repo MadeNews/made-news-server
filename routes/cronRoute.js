@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const categories = require("../categories.json");
 const { saveWeeklyArticles } = require("../services/weeklyPostsStorageServices");
-const { generateWeeklyCategoryStories } = require("../llama");
+const { generateWeeklyCategoryStories } = require("../services/SatireService");
 
 router.get("/refreshWeekly", async (_req, res) => {
   try {

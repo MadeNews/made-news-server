@@ -1,7 +1,7 @@
 const axios = require("axios");
 const dotenv = require("dotenv");
-const { promptManager } = require("./utils/SystemPromptsManager");
-const {validatePromptOrThrow} = require("./utils/promptValidation");
+const { promptManager } = require("../utils/SystemPromptsManager");
+const {validatePromptOrThrow} = require("../utils/promptValidation");
 dotenv.config();
 
 
@@ -127,7 +127,7 @@ Format strictly:
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "llama-3.3-70b-versatile",
+        model: "gemma2-9b-it",
         messages: [
           { role: "system", content: formatPrompt },
           { role: "system", content: restrictionsPrompt },
@@ -135,7 +135,7 @@ Format strictly:
           { role: "user", content: userPrompt },
         ],
         temperature: 0.9,
-        max_tokens: 500,
+        max_tokens: 600,
       },
       {
         headers: {
