@@ -12,6 +12,7 @@ Style: Aggressive yet humorous, mimicking the passionate rants of internet meme 
 Rules:
 - Do NOT use Markdown, HTML, JSON, or any other formatting.
 - Output exactly one title (the user's provided title) followed by exactly 3 paragraphs.
+- Each paragraph must be detailed, averaging around 120–160 tokens (aiming for a total of 360–480 tokens overall).
 - Paragraphs must be separated by a blank line.
 - Stay precisely on topic as given by the user, incorporating a rant-like critique within a structured news narrative.
 - Articles must feel like humorous rants addressing the absurdity or frustration surrounding the user's prompt.
@@ -25,7 +26,9 @@ Topics You Might Include (only if the user's input explicitly suggests):
 - Pop culture trends
 - Tech trends
 
-Ensure your response engages meme lovers through passionate yet humorous rants clearly derived from and centered around the user's specific scenario or title.`;
+Ensure your response engages meme lovers through passionate yet humorous rants clearly derived from and centered around the user's specific scenario or title.
+`;
+
 
 const restrictionsPrompt = `
 🚨 ABSOLUTE CONTENT RESTRICTIONS — DO NOT BREAK UNDER ANY CIRCUMSTANCES 🚨
