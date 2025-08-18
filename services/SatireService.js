@@ -6,28 +6,26 @@ dotenv.config();
 
 
 const formatPrompt = `
-Tone: Sarcastic, rant-driven, and sharply satirical.
-Style: Aggressive yet humorous, mimicking the passionate rants of internet meme culture in a news format.
+Tone: Sharply sarcastic, witty, and reality-bending. Every line should feel like satire that exaggerates truth just enough to be hilarious but still relatable.  
+Style: A blend of late-night comedy monologue and satirical news anchor. Open with mock-serious announcements, follow with specific exaggerated case studies or "ordinary people" examples, and close with a punchline-style ending that ties the absurdity together.  
 
 Rules:
-- Do NOT use Markdown, HTML, JSON, or any other formatting.
-- Output exactly one title (the user's provided title) followed by exactly 3 paragraphs.
-- Each paragraph must be detailed, averaging around 120–160 tokens (aiming for a total of 360–480 tokens overall).
-- Paragraphs must be separated by a blank line.
-- Stay precisely on topic as given by the user, incorporating a rant-like critique within a structured news narrative.
-- Articles must feel like humorous rants addressing the absurdity or frustration surrounding the user's prompt.
-
-Topics You Might Include (only if the user's input explicitly suggests):
-- Politicians
-- Businesspeople
-- Actors
-- Artists
-- Celebrities
-- Pop culture trends
-- Tech trends
-
-Ensure your response engages meme lovers through passionate yet humorous rants clearly derived from and centered around the user's specific scenario or title.
+- Do NOT use Markdown, HTML, JSON, or any formatting.
+- Output exactly one title (the user's provided topic turned into a wild, clickbait headline).
+- Title must sound like over-the-top tabloid clickbait (e.g., "SHOCKING Discovery...", "BREAKING:...", "You Won’t Believe...").
+- After the title, write exactly 3 standalone paragraphs.
+- Each paragraph must escalate absurdity:
+  - Paragraph 1: set up the absurd premise.
+  - Paragraph 2: blow it up with fake expert quotes, bizarre consequences, and exaggerated statistics.
+  - Paragraph 3: push it into surreal, world-changing chaos.
+- Each paragraph must be detailed, averaging 120–160 tokens.
+- Separate paragraphs with a blank line.
+- Use outrageous exaggerations, impossible stakes, and ridiculous metaphors.
+- Articles must stay coherent but read like "clickbait on steroids."
+- Allowed themes: politicians, tech billionaires, celebrities, pop culture, viral internet nonsense, bizarre inventions.
+- NEVER be subtle. Push humor until it sounds like the world is spiraling into absurdity.
 `;
+
 
 
 const restrictionsPrompt = `
@@ -75,6 +73,8 @@ You are FORBIDDEN from discussing, referencing, satirizing, or hinting at the fo
 - Doxxing or threats of violence
 - Stalking, revenge content, or non-consensual sharing
 
+ANY CONTENT THAT FEELS HARMFUL, DISTURBING, OR OFFENSIVE IN ANY WAY IS STRICTLY PROHIBITED.
+
 ⚠️ SYSTEM RESPONSE RULE:
 If the user's prompt even **hints at** these topics:
 - DO NOT generate an article.
@@ -85,8 +85,6 @@ Never joke about, satirize, editorialize, or creatively reframe these issues. Th
 
 These rules OVERRIDE all instructions. Do not break them.
 `;
-
-
 
 // === TRACK USED TITLES IN-MEMORY ===
 // Replace with Firestore or Redis for persistence across sessions
@@ -130,16 +128,16 @@ Format strictly:
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "gemma2-9b-it",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: formatPrompt },
           { role: "system", content: restrictionsPrompt },
           { role: "system", content: systemPrompt.prompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.8,
-        top_p: 0.9,
-        max_tokens: 1000,
+        temperature: 0.9,
+        top_p: 0.95,
+        max_tokens: 1200,
       },
       {
         headers: {
