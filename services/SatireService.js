@@ -128,7 +128,7 @@ Format strictly:
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "llama-3.3-70b-versatile",
+        model: "meta-llama/llama-4-maverick-17b-128e-instruct",
         messages: [
           { role: "system", content: formatPrompt },
           { role: "system", content: restrictionsPrompt },
