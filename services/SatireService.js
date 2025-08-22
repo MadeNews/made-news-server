@@ -73,8 +73,6 @@ You are FORBIDDEN from discussing, referencing, satirizing, or hinting at the fo
 - Doxxing or threats of violence
 - Stalking, revenge content, or non-consensual sharing
 
-ANY CONTENT THAT FEELS HARMFUL, DISTURBING, OR OFFENSIVE IN ANY WAY IS STRICTLY PROHIBITED.
-
 ⚠️ SYSTEM RESPONSE RULE:
 If the user's prompt even **hints at** these topics:
 - DO NOT generate an article.
@@ -128,7 +126,7 @@ Format strictly:
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+        model: "openai/gpt-oss-120b",
         messages: [
           { role: "system", content: formatPrompt },
           { role: "system", content: restrictionsPrompt },
