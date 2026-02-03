@@ -2,3 +2,4 @@
 .serviceKey.json
 node_modules
 .vercel
+serviceKey.json
