@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+require("./services/firebaseAdmin");
 const apiRoutes = require("./routes/newsRoutes");
 const publicRoutes = require("./routes/publicRoutes");
 const authMiddleware = require("./middleware/authMiddleware");
