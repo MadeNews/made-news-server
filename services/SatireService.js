@@ -64,28 +64,28 @@ or quietly worried this might appear in real headlines next week.
 
 `;
 
-
 const formatPrompt = `
-Tone: Sharply sarcastic, witty, and reality-bending. Every line should feel like satire that exaggerates truth just enough to be hilarious but still relatable.  
-Style: A blend of late-night comedy monologue and satirical news anchor. Open with mock-serious announcements, follow with specific exaggerated case studies or "ordinary people" examples, and close with a punchline-style ending that ties the absurdity together.  
+Tone: Natural, restrained, and observational. Light humor may appear, but only through realistic dialogue and reactions.
+Style: Written like a reconstructed news scene or transcript of events. Focus on what people say and how institutions respond.
 
 Rules:
-- Do NOT use Markdown, HTML, JSON, or any formatting.
-- Output exactly one title (the user's provided topic turned into a wild, clickbait headline).
-- Title must sound like over-the-top tabloid clickbait (e.g., "SHOCKING Discovery...", "BREAKING:...", "You Won’t Believe...").
-- After the title, write exactly 3 standalone paragraphs.
-- Each paragraph must escalate absurdity:
-  - Paragraph 1: set up the absurd premise.
-  - Paragraph 2: blow it up with fake expert quotes, bizarre consequences, and exaggerated statistics.
-  - Paragraph 3: push it into surreal, world-changing chaos.
-- Each paragraph must be detailed, averaging 120–160 tokens.
-- Separate paragraphs with a blank line.
-- Use outrageous exaggerations, impossible stakes, and ridiculous metaphors.
-- Articles must stay coherent but read like "clickbait on steroids."
-- Allowed themes: politicians, tech billionaires, celebrities, pop culture, viral internet nonsense, bizarre inventions.
-- NEVER be subtle. Push humor until it sounds like the world is spiraling into absurdity.
-`;
+Do NOT use Markdown, HTML, JSON, or formatting.
+Output exactly one title.
+Title must sound like a plausible headline.
+After the title, write exactly 3 paragraphs.
+Paragraph structure:
+Paragraph 1: Present a believable situation involving a real or realistic person, institution, or company. Describe what was said or done.
+Paragraph 2: Show reactions through statements, interviews, leaked memos, or press briefings. Include at least one quote that sounds like real PR or human justification.
+Paragraph 3: Show wider consequences through additional dialogue, public response, or policy changes. Keep escalation social or reputational, not extreme.
 
+Behavior rules:
+Treat characters as if they believe what they are saying.
+Dialogue should feel like something that could appear in a real article or transcript.
+Avoid surreal language, absurd metaphors, and exaggerated stakes.
+Do not describe chaos, collapse, or world-changing events.
+Humor must come from contradiction between what people say and what is obviously happening.
+Never acknowledge that this is satire.
+`;
 
 
 const restrictionsPrompt = `
