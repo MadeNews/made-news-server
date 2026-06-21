@@ -114,6 +114,14 @@ Format strictly:
       };
     }
 
+    if (error.response?.status === 429) {
+      return {
+        error: true,
+        rateLimited: true,
+        message: "Rate limit reached.",
+      };
+    }
+
     return {
       error: true,
       message: "We're having technical difficulties generating this story. Please try again later.",
@@ -135,7 +143,13 @@ const generateWeeklyCategoryStories = async (category, count = 5, customPrompt =
 
   for (let i = 0; i < count; i++) {
     const prompt = customPrompt || `Write a MadeNews satire story in the category: ${category}.`;
-    const result = await generateSatireStory(prompt, Array.from(usedTitles));
+    let result = await generateSatireStory(prompt, Array.from(usedTitles));
+
+    if (result?.rateLimited) {
+      console.warn(`⚠️ Rate limited on story ${i + 1}/${count} for [${category}]. Waiting 60 seconds before retrying...`);
+      await delay(60000);
+      result = await generateSatireStory(prompt, Array.from(usedTitles));
+    }
 
     if (result?.title && result?.paragraphs) {
       usedTitles.add(result.title.toLowerCase());
