@@ -1,0 +1,97 @@
+
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'rubik',sans-serif;
+}
+
+body {
+    padding: 1rem;
+    background-color: #e9eaec;
+}
+
+h1 {
+    font-size: 2rem;
+}
+
+h2 {
+    font-size: 1rem;
+}
+
+p {
+    font-size: 1rem;
+}
+
+#appHeading {
+    font-weight: 300;
+    font-size: 2rem;
+    color: #000;
+    text-align: center;
+}
+
+#container {
+    border-radius: 1rem;
+    overflow: hidden;
+    margin-top: 5vh;
+    background-color: papayawhip;
+    display: flex;
+    flex-direction: row;
+    border: 1px solid #000;
+}
+
+#appLogo {
+    max-height: fit-content;
+    border-radius: 0 1rem 1rem 0;
+    width: 30%;
+    height: auto;
+    display: block;
+}
+
+#articleContainer {
+    width: 70%;
+    padding: 1rem;
+    font-size: 1rem;
+}
+
+
+#storyArticle {
+    margin-top: 1rem;
+}
+
+#instaLink {
+    margin-top: 1rem;
+    display: block;
+    margin-inline: auto;
+    width: 5vw;
+    height: auto;
+}
+
+@media (max-width: 600px) {
+
+#appHeading {
+    font-size: 2rem;
+}
+
+#container{
+    flex-direction: column;
+}
+
+#appLogo {
+    width: 100%;
+    height: fit-content;
+}
+
+#articleContainer {
+    width: 100%;
+    text-align: start;
+}
+
+
+#instaLink {
+    width: 10vw;
+}
+
+
+}

@@ -1,0 +1,19 @@
+[
+    {
+        "prompt":"Generate a random article about politics as theme and use any world leader as protagnist", "category": "Politics"
+    },
+
+    {
+        "prompt": "Generate a random article about aliens as theme and create bizarre scenarios regarding aliens and earth", "category": "Aliens"
+    },
+    
+    {
+        "prompt": "Generate a random article about education system and univerisities. Use any world renowned university as lead example.", "category": "Education"
+    },
+    {
+        "prompt":"Generate a random article about technology, tech people, and tech companies. Use Tech CEOs or other renowed leaders as protagnists", "category": "Technology"
+    },
+    {
+        "prompt":"Generate a fictional news article that explores absurd conspiracy theories involving governments, tech companies, or celebrities. Blend elements of sci-fi, paranoia, and deadpan humor.", "category": "Conspiracies"
+    }
+]
