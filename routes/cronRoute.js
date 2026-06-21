@@ -22,8 +22,9 @@ const generateAll = async () => {
   for (const categoryObject of categories) {
     
     const stories = await generateWeeklyCategoryStories(
-      categoryObject.prompt,
-      categoryObject.category
+      categoryObject.category,
+      5,
+      categoryObject.prompt
     );
     categorizedArticles[categoryObject.category] = stories;
   }

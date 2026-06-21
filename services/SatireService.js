@@ -130,11 +130,11 @@ const generateRandomStory = async () => {
   return await generateSatireStory(userPrompt);
 };
 
-const generateWeeklyCategoryStories = async (category, count = 5) => {
+const generateWeeklyCategoryStories = async (category, count = 5, customPrompt = null) => {
   const articles = [];
 
   for (let i = 0; i < count; i++) {
-    const prompt = `Write a MadeNews satire story in the category: ${category}.`;
+    const prompt = customPrompt || `Write a MadeNews satire story in the category: ${category}.`;
     const result = await generateSatireStory(prompt, Array.from(usedTitles));
 
     if (result?.title && result?.paragraphs) {
