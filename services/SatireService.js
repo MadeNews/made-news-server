@@ -64,7 +64,7 @@ Format strictly:
     const result = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "groq/compound",
+        model: "llama-3.3-70b-versatile",
         messages: [...messages, { role: "user", content: userPrompt }],
         temperature,
         top_p: 0.9,
@@ -103,7 +103,8 @@ Format strictly:
     };
 
   } catch (error) {
-    console.error("Failed to generate satire:", error.message);
+    const groqError = error.response?.data;
+    console.error("Failed to generate satire:", error.message, groqError ?? "");
 
     if (error.message.startsWith("NO_GO_AREA_DETECTED")) {
       const flaggedTerm = error.message.split('"')[1] || "this topic";
