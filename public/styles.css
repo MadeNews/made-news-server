@@ -307,28 +307,40 @@ body {
     box-shadow: 0 30px 70px rgba(0,0,0,0.25);
 }
 
-.style-card.reddit {
-    border-top: 8px solid #FF4500;
-}
-
-.style-card.corporate {
-    border-top: 8px solid #0077B5;
-}
-
 .style-card.uncle {
     border-top: 8px solid #00A86B;
+}
+
+.style-card.techbro {
+    border-top: 8px solid #6C5CE7;
+}
+
+.style-card.rally {
+    border-top: 8px solid #D7263D;
+}
+
+.style-card.genz {
+    border-top: 8px solid #FF6B35;
+}
+
+.style-card.diplomat {
+    border-top: 8px solid #0077B5;
 }
 
 .style-card.pr {
     border-top: 8px solid #FF69B4;
 }
 
-.style-card.conspiracy {
-    border-top: 8px solid #8B0000;
+.style-card.gossip {
+    border-top: 8px solid #B5651D;
 }
 
-.style-card.millennial {
-    border-top: 8px solid #FF6B35;
+.style-card.wallstreet {
+    border-top: 8px solid #1B998B;
+}
+
+.style-card.hollywood {
+    border-top: 8px solid #C9A227;
 }
 
 .style-header {
@@ -342,6 +354,13 @@ body {
     font-weight: 800;
     margin-bottom: 15px;
     color: #1a1a1a;
+}
+
+.style-brief {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #4a4a4a;
+    font-weight: 500;
 }
 
 .style-example {

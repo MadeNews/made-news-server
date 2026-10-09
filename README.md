@@ -1,804 +1,348 @@
-# MadeNews Server — Technical Architecture Report
+# MadeNews Server
+
+Backend for **MadeNews**, a satire news app in the tradition of The Onion. Every article it produces is fictional, written for laughs, and ends with a satire disclaimer.
+
+The server is an Express app (deployed on Vercel) that:
+
+- writes **one-off satire stories** on any topic, narrated by one of 9 comedy characters;
+- builds the **weekly feed**: 2 articles for each of 5 categories, generated in a single request and stored in Firestore;
+- handles **email verification** for app users.
+
+Stories are generated with Groq-hosted models (default `openai/gpt-oss-120b`). The prompts follow the **CO-STAR** framework (Context, Objective, Style, Tone, Audience, Response) plus a Boundaries section.
 
 ---
 
-## Table of Contents
+## Contents
 
-1. [Project Overview](#1-project-overview)
-2. [Technology Stack](#2-technology-stack)
-3. [Repository Structure](#3-repository-structure)
-4. [Application Bootstrap](#4-application-bootstrap)
-5. [Middleware Layer](#5-middleware-layer)
-6. [Routing Architecture](#6-routing-architecture)
-7. [Service Layer](#7-service-layer)
-8. [Prompt Engineering Architecture](#8-prompt-engineering-architecture)
-9. [Content Moderation Pipeline](#9-content-moderation-pipeline)
-10. [Weekly Refresh Pipeline](#10-weekly-refresh-pipeline)
-11. [Email Verification Flow](#11-email-verification-flow)
-12. [Firestore Data Model](#12-firestore-data-model)
-13. [Frontend & Public Assets](#13-frontend--public-assets)
-14. [Deployment](#14-deployment)
-15. [Environment Variables](#15-environment-variables)
-16. [Known Issues & Technical Debt](#16-known-issues--technical-debt)
+1. [Quick start](#1-quick-start)
+2. [Configuration](#2-configuration)
+3. [API reference](#3-api-reference)
+4. [How a story is generated](#4-how-a-story-is-generated)
+5. [Prompts and personas](#5-prompts-and-personas)
+6. [Weekly feed](#6-weekly-feed)
+7. [Content moderation](#7-content-moderation)
+8. [Email verification](#8-email-verification)
+9. [Firestore data model](#9-firestore-data-model)
+10. [Project structure](#10-project-structure)
+11. [Deployment](#11-deployment)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Known issues](#13-known-issues)
 
 ---
 
-## 1. Project Overview
+## 1. Quick start
 
-MadeNews is a satirical AI-powered news generation server. It exposes a REST API that uses a large language model (Groq-hosted `llama-3.3-70b-versatile`) to produce structured satirical news articles. The system supports:
+```bash
+npm install
+cp .env.example .env   # fill in the secrets (section 2); every other value has a working default
+node server.js         # http://localhost:3000
+# or, to mirror Vercel locally:
+vercel dev
+```
 
-- **On-demand generation**: A caller supplies a topic; the server returns a generated satire article.
-- **Character-mode generation**: Articles are narrated through one of 10 fixed character personas (e.g. Trump-style, Gen Z, Wall Street Guru).
-- **Weekly batch generation**: A cron-triggered endpoint generates 5 articles per category across 5 predefined categories (25 articles total), persists them to Firestore, and serves them to clients on demand.
-- **Email verification**: JWT-based email verification flow tied to a Firestore `users` collection.
+Every route except `/`, `/story/random` and `/verify/:token` needs the header `x-api-key: <APP_API_KEY>`.
 
-The server is designed to be deployed as a Vercel serverless function but runs equally well as a standalone Node.js process.
+```bash
+curl -H "x-api-key: $APP_API_KEY" \
+  "http://localhost:3000/api/generate?title=President%20vetoes%20Mondays&satireStyle=gossipAunt"
+```
 
 ---
 
-## 2. Technology Stack
+## 2. Configuration
 
-| Layer | Technology | Version | Role |
+All configuration comes from environment variables: `.env` when hosting natively (start from the commented template `.env.example`), or Project Settings → Environment Variables on Vercel. Everything Groq-specific is read in `config/groq.js`, so model or limit changes on Groq's side need a config change, not a code change. Every Groq setting has a default.
+
+### Secrets
+
+| Variable | Purpose |
+|---|---|
+| `GROQ_API_KEY` | Groq API key |
+| `APP_API_KEY` | Value clients must send in the `x-api-key` header |
+| `GCP_SERVICE_KEY` | Firebase service account JSON (see the format note below) |
+| `JWT_SECRET` | Signs email verification tokens |
+| `EMAIL_USER`, `EMAIL_PASSWORD` | SMTP login for verification emails |
+
+**`GCP_SERVICE_KEY` format:** paste the downloaded service account JSON **on one line**, without quotes. `vercel dev` cannot read multi-line values. To convert the file:
+
+```bash
+node -e "console.log(JSON.stringify(require('./service-account.json')))"
+```
+
+The key comes from Firebase Console → Project settings → Service accounts → Generate new private key. Never commit it or paste it anywhere public.
+
+### Groq: endpoint, models and limits
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GROQ_API_URL` | Groq chat completions URL | API endpoint |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Model for one-off stories |
+| `WEEKLY_GROQ_MODEL` | `GROQ_MODEL` | Model for the weekly batch |
+| `GROQ_TPM_LIMIT` | `8000` | Your plan's tokens-per-minute limit; the weekly output budget is derived from it |
+| `GROQ_TOKEN_SAFETY_MARGIN` | `350` | Headroom kept below the limit |
+| `GROQ_CHARS_PER_TOKEN` | `3.5` | Used to estimate prompt size |
+| `GROQ_REQUEST_TIMEOUT_MS` | `120000` | HTTP timeout |
+| `GROQ_RETRY_MAX_WAIT_SECONDS` | `65` | Longest wait before retrying a weekly batch after a 429 |
+
+### Groq: reasoning
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GROQ_REASONING_EFFORT` | `low` | `low` / `medium` / `high` for reasoning models; `off` for models that reject reasoning params (e.g. Llama) |
+| `STORY_REASONING_EFFORT`, `CHARACTER_REASONING_EFFORT`, `WEEKLY_REASONING_EFFORT` | `GROQ_REASONING_EFFORT` | Per-mode override |
+| `GROQ_HIDE_REASONING` | `true` | Sends `include_reasoning: false` |
+
+Reasoning tokens count toward the output cap, so a higher effort needs a higher `*_MAX_TOKENS`.
+
+### Generation
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `STORY_TEMPERATURE`, `STORY_MAX_TOKENS` | `0.85`, `3000` | News-mode stories |
+| `CHARACTER_TEMPERATURE`, `CHARACTER_MAX_TOKENS` | `0.95`, `3000` | Character-mode stories |
+| `WEEKLY_TEMPERATURE` | `0.85` | Weekly batch |
+| `WEEKLY_MAX_TOKENS` | unset | Optional extra cap on the weekly output budget |
+| `GROQ_TOP_P` | `0.9` | Nucleus sampling |
+| `ARTICLES_PER_CATEGORY` | `2` | Weekly articles per category |
+
+### App and email
+
+| Variable | Purpose |
+|---|---|
+| `EMAIL_SERVICE` | Nodemailer service name, e.g. `gmail` |
+| `SERVER_URL` | Base URL used in verification links, e.g. `https://made-news-server.vercel.app` |
+
+---
+
+## 3. API reference
+
+| Method | Path | Auth | Description |
 |---|---|---|---|
-| Runtime | Node.js | — | Server runtime |
-| HTTP Framework | Express | ^5.1.0 | Routing, middleware, request handling |
-| LLM Provider | Groq API | REST (via axios) | `llama-3.3-70b-versatile` inference |
-| HTTP Client | axios | ^1.9.0 | All outbound HTTP to Groq |
-| Database | Firebase Firestore | firebase-admin ^13.4.0 | Persistent article + user storage |
-| Auth SDK | Firebase Admin | ^13.4.0 | Firestore + Auth access |
-| Email Transport | Nodemailer | ^7.0.5 | Sending verification emails via SMTP |
-| Token Auth | jsonwebtoken (JWT) | (unlisted — see §16) | Verification token signing/verification |
-| Environment | dotenv | ^16.5.0 | `.env` loading |
-| Cross-origin | cors | ^2.8.5 | CORS headers |
-| Deployment | Vercel | vercel.json v2 | Serverless deployment target |
-| Scheduling | node-cron | ^4.0.7 | (declared but not actively used in code) |
-| CSS Tooling | clean-css, html-minifier-terser, terser | various | Asset optimization (declared, not wired) |
+| GET | `/api/generate?title=<topic>&satireStyle=<personaId>` | key | One story. Without `satireStyle`: news mode with a random narrator. With it: character mode (see [persona IDs](#personas)). |
+| GET | `/api/generate/random` | key | One story on a topic the model picks |
+| GET | `/api/weeklyArticles` | key | The saved weekly feed |
+| GET | `/cron/refreshWeekly` | key | Regenerates the weekly feed (also at `/refreshWeekly`) |
+| POST | `/api/email/send-verification` | key | Body `{ "userId": "<firebase uid>" }`; sends a verification email |
+| GET | `/api/email/is-verified/:uid` | key | Whether the user's email is verified |
+| GET | `/story/random` | public | A random story rendered as an HTML page |
+| GET | `/verify/:token` | public | Target of the verification email link |
+| GET | `/` | public | Landing page (`public/index.html`) |
+
+**Story response**
+
+```json
+{
+  "success": true,
+  "title": "Parliament Declares Itself Emotionally Unavailable Until Q3",
+  "paragraphs": ["…", "…", "…", "MadeNews is a satire service like The Onion. Everything in this article is made up for laughs."],
+  "appGenerated": false,
+  "createdAt": "2026-10-09T10:58:59.584Z",
+  "satireStyle": "gossipAunt"
+}
+```
+
+`paragraphs` holds the 3 story paragraphs; the last item is always the disclaimer, added by the server.
+
+**Weekly refresh response**
+
+```json
+{ "success": true, "newCount": 10, "report": { "Politics": "new (2)", "Aliens": "kept last week" } }
+```
+
+**Errors:** `401` wrong or missing API key; `400` missing `title`; `500` with a user-facing message for blocked topics, rate limits ("Rate limit reached.") or unusable model replies.
 
 ---
 
-## 3. Repository Structure
+## 4. How a story is generated
+
+`services/SatireService.js → generateSatireStory(topic, exclusions, satireStyle)`
+
+1. **Keyword check:** `utils/promptValidation.js` rejects topics containing banned terms before any model call.
+2. **Narrator:** `satireStyle` picks a persona; without it, `promptManager.getRandomPrompt()` picks one, avoiding recently used ones.
+3. **Prompt:** `prompts/builder.js` assembles the CO-STAR system message and a user message containing the topic (section 5).
+4. **Model call:** one request to Groq through `config/groq.js`, using the mode's temperature, token cap and reasoning effort.
+5. **Parsing:** `parseStory` reads the `TITLE:` line and the paragraphs. It also accepts paragraphs separated by single line breaks, drops any disclaimer the model wrote, and treats a first block of more than 25 words as a paragraph, not a title.
+6. **Missing title:** if the model skipped the title, one small extra call (about 500 tokens) writes one in the narrator's voice.
+7. **Disclaimer:** `prompts/disclaimer.js` is appended as the last paragraph.
+
+Every call logs `📦 story finish_reason=… completion=…`. If a reply is unusable, the server logs the reason and the start of the raw reply.
+
+**Token use:** roughly 2.5–2.8K prompt tokens plus the reply. Story requests stay well under the free tier's 8K tokens per minute.
+
+---
+
+## 5. Prompts and personas
+
+### CO-STAR prompt
+
+`prompts/builder.js` joins one file per section into a single system message, in this order:
+
+| Section | File | What it controls |
+|---|---|---|
+| Context | `sections/context.js` | MadeNews is a labeled satire app like The Onion |
+| Objective | `sections/objective.js` | What to write for the given topic, plus the topic-focus rules: the topic is the subject, the character is the lens |
+| Tone | `sections/tone.js` | The persona, its voice samples, banned example lines, Onion-style irony (total conviction, never winking), variety rules |
+| Style | `sections/style.js` | Satire craft: absurd premise as fact, escalation, specific but obviously absurd details |
+| Audience | `sections/audience.js` | Who the jokes are for |
+| Boundaries | `sections/boundaries.js` | What's in scope (including politics), punch-up rule, 8 hard limits |
+| Response | `sections/response.js` | Exact output format per mode; the services parse this |
+
+Each rule lives in exactly one file, so one-off and weekly prompts can't contradict each other. The weekly batch uses the compact variants of Style and Boundaries, plus a one-line roster of the characters.
+
+**Modes**
+
+- **News mode** (no `satireStyle`): a news article (headline plus 3 paragraphs of 3–5 sentences, at most 110 words each), narrated by the character.
+- **Character mode** (`satireStyle` set): a monologue by the character (title plus 3 paragraphs of 4–6 sentences, at most 120 words each).
+
+### Personas
+
+Personas live in `prompts/SystemPromptsManager.js`. Each has an `id`, `name`, a full `prompt`, a one-line `brief` (used by the weekly roster) and `samples` (example lines that show the voice).
+
+| `satireStyle` id | Name | Voice |
+|---|---|---|
+| `nostalgicUncle` | Nostalgic Uncle | Compares everything to an invented "good old days", ends with nonsensical old-timey wisdom |
+| `techBroVisionary` | Tech Bro Visionary | Pitches everything as a $10B disruption in buzzword soup |
+| `trumpStyle` | Trump-Style Ranter | SNL-style rally impression: superlatives, CAPS, nicknames, tangents, chants |
+| `genZ` | Gen Z | Terminally online slang, misplaced emojis, 4-second attention span |
+| `globalDiplomat` | Global Unity Diplomat | Hollow, soaring platitudes about everything |
+| `prManager` | PR Manager | Reframes every disaster as an intentional, visionary triumph |
+| `gossipAunt` | Gossip Aunt | "Insider sources", dramatic gasps, teases she never resolves |
+| `wallStreetGuru` | Money Mogul | Everything is a trade, with fake tickers, metrics and billionaire worship |
+| `hollywoodProducer` | Hollywood Producer | Greenlights every story into a franchise with casting and sequels |
+
+Sample lines, and quoted examples inside a persona's description, are automatically listed in the prompt as **banned lines**, because models tend to copy examples word for word.
+
+**Adding a persona:** add an entry to `systemPrompts` with `id`, `name`, `prompt`, `brief` and 2–3 `samples`. It becomes available as `satireStyle=<id>`, joins the random rotation and the weekly roster automatically. If it should appear on the landing page, add a card to `public/index.html`.
+
+**Tuning tips**
+
+- Voice too tame: raise `CHARACTER_TEMPERATURE`, or set `CHARACTER_REASONING_EFFORT=high`.
+- Drifting off topic: lower `CHARACTER_TEMPERATURE` (for example to `0.85`).
+- Format problems: check the `📦` log line. `finish_reason=length` means raise `*_MAX_TOKENS`.
+
+---
+
+## 6. Weekly feed
+
+`GET /cron/refreshWeekly` → `refreshWeekly.js` → `services/WeeklyBatchService.js`
+
+- **One request for the whole feed.** `buildWeeklyMessages` asks for every category × `ARTICLES_PER_CATEGORY` articles in a single call and assigns a narrator to each slot up front, so voices are spread evenly. The categories and their briefs come from `categories.json`.
+- **Sized to the limit.** Output budget = `GROQ_TPM_LIMIT` − estimated prompt − safety margin, about 6K tokens on the free tier. Paragraph length scales with the batch size. A typical run uses about 4–5K tokens and finishes in about 10 seconds.
+- **Parsing.** `services/weeklyBatchParser.js` reads `### Category` blocks and drops any article that is cut off or has no headline. The disclaimer is appended to each article.
+- **The feed is never wiped.** A category that comes back short is topped up with last week's articles, an empty category keeps last week's set, and if nothing usable comes back, Firestore isn't touched.
+- **Retry.** One automatic retry after a 429, waiting for the time given in `retry-after`.
+
+The refresh is triggered externally (for example by cron-job.org or a GitHub Actions schedule) with the `x-api-key` header. It replaces the live feed.
+
+---
+
+## 7. Content moderation
+
+Two layers:
+
+1. **Before the model call:** `utils/promptValidation.js` matches about 40 banned terms (including spaced or obfuscated spellings) and returns `NO_GO_AREA_DETECTED`.
+2. **In the prompt:** the Boundaries section allows political and controversial satire. It tells the model to punch up, to keep real public figures in obviously absurd parody, and to output `NO_GO_AREA_DETECTED: User tried topic "…"` only if no satirical angle avoids one of 8 hard limits. The service turns that into a user-facing error.
+
+---
+
+## 8. Email verification
+
+`services/emailVerificationService.js`, using JWT and Nodemailer:
+
+- **Send:** `POST /api/email/send-verification` reads `users/{uid}` and signs a 5-minute JWT. It stores the token in `email_verifications/{uid}` and emails a link to `${SERVER_URL}/verify/<token>`.
+- **Verify:** `GET /verify/:token` checks the JWT signature and type, the stored token, the expiry and whether the user is already verified. It then marks the user as verified.
+- **Check:** `GET /api/email/is-verified/:uid` returns the flag and cleans up the verification record once the user is verified.
+- **Resend:** limited to once every 2 minutes. A newer token invalidates older ones.
+
+---
+
+## 9. Firestore data model
 
 ```
-made-news-server-main/
-├── server.js                   # Process entry point — binds Express app to port
-├── app.js                      # Express app factory — registers all middleware and routes
-├── refreshWeekly.js            # Standalone weekly generation function (legacy, buggy — see §16)
-├── categories.json             # Static category definitions (5 entries with prompt + label)
-├── vercel.json                 # Vercel serverless deployment config
-├── package.json
-│
-├── routes/
-│   ├── newsRoutes.js           # /api/* — on-demand generation + weekly article reads
-│   ├── publicRoutes.js         # Unprotected routes: homepage, /story/random, /verify/:token
-│   ├── emailRoutes.js          # /api/email/* — send + check email verification
-│   └── cronRoute.js            # /cron/refreshWeekly — triggers batch generation
-│
-├── services/
-│   ├── firebaseAdmin.js        # Firebase Admin singleton initializer
-│   ├── SatireService.js        # Core LLM orchestration and generation logic
-│   ├── weeklyPostsStorageServices.js  # Firestore read/write for weekly batch
-│   └── emailVerificationService.js    # Full JWT email verification lifecycle
-│
-├── prompts/
-│   ├── SystemPromptsManager.js # Persona registry (prompt, brief, voice samples) + selection
-│   ├── builder.js              # Assembles CO-STAR prompts for stories and the weekly batch
-│   ├── disclaimer.js           # Satire disclaimer appended by code to every article
-│   ├── index.js                # Entry point (re-exports builder)
-│   └── sections/               # One CO-STAR section per file
-│       ├── context.js          # C: what MadeNews is
-│       ├── objective.js        # O: what to produce, per mode
-│       ├── style.js            # S: satire craft rules (full + compact)
-│       ├── tone.js             # T: persona voice with Onion-style irony
-│       ├── audience.js         # A: who the jokes are for
-│       ├── boundaries.js       # Scope + hard limits (NO_GO output)
-│       └── response.js         # R: exact output format per mode
-│
-├── middleware/
-│   └── authMiddleware.js       # x-api-key header enforcement for protected routes
-│
+users/{uid}
+  email, username, emailVerified, emailVerificationDate
+
+email_verifications/{uid}
+  email, token, sentAt, expiresAt, verified, attempts, lastAttemptAt, verifiedAt
+
+weekly_posts/weekly_posts                       (single document, replaced on each refresh)
+  articles: { [category]: [{ title, content, createdAt, appGenerated: true, category }] }
+  updatedAt: ISO string
+  createdAt: server timestamp
+```
+
+`content` is the paragraphs joined with blank lines; the last paragraph is the disclaimer.
+
+---
+
+## 10. Project structure
+
+```
+├── server.js                 Starts the HTTP listener when run directly (Vercel imports app instead)
+├── app.js                    Express app: dotenv, static files, CORS, auth, routes
+├── refreshWeekly.js          Weekly refresh entry (reads ARTICLES_PER_CATEGORY)
+├── categories.json           Weekly categories and their briefs
 ├── config/
-│   └── email.js                # Legacy Nodemailer transporter (not actually used — see §16)
-│
-├── utils/
-│   ├── promptValidation.js     # Regex + obfuscation-aware banned keyword filter
-│   ├── escapeHtml.js           # XSS-safe HTML entity encoder
-│   ├── formatResponse.js       # Uniform { success, message, data } envelope
-│   └── dateHelpers.js          # ISO week calculation helpers (unused in routes — see §16)
-│
-├── public/
-│   ├── index.html              # Marketing landing page
-│   ├── script.js               # Client-side scroll animation + download handler
-│   ├── styles.css              # Full landing page design system
-│   ├── story.css               # Two-column story display layout
-│   └── fonts.css               # Google Fonts Rubik import
-│
-└── templates/
-    └── story.html              # Server-rendered story page template ({{TITLE}}, {{BODY}})
+│   ├── groq.js               All Groq settings from env + request helpers
+│   └── email.js              (unused, see Known issues)
+├── middleware/
+│   └── authMiddleware.js     x-api-key check, public path allowlist
+├── routes/
+│   ├── newsRoutes.js         /api/generate, /api/generate/random, /api/weeklyArticles
+│   ├── cronRoute.js          /cron/refreshWeekly
+│   ├── publicRoutes.js       /, /story/random, /refreshWeekly, /verify/:token
+│   └── emailRoutes.js        /api/email/*
+├── services/
+│   ├── SatireService.js      One-off story generation, parsing, title fallback
+│   ├── WeeklyBatchService.js Weekly batch generation, merge, save
+│   ├── weeklyBatchParser.js  Pure parser for the weekly batch
+│   ├── weeklyPostsStorageServices.js  Firestore read/write for the feed
+│   ├── emailVerificationService.js    Email verification lifecycle
+│   └── firebaseAdmin.js      Firebase Admin init; accepts the key as raw, quoted or base64 JSON
+├── prompts/
+│   ├── builder.js            Assembles the CO-STAR prompts
+│   ├── index.js              Entry point
+│   ├── SystemPromptsManager.js  Personas + selection
+│   ├── disclaimer.js         Satire disclaimer text
+│   └── sections/             context, objective, tone, style, audience, boundaries, response
+├── utils/                    promptValidation, escapeHtml, formatResponse, dateHelpers
+├── templates/                story.html (for /story/random), verification.html
+├── public/                   Landing page (index.html, styles.css, script.js) and assets
+└── apidog/                   OpenAPI file for importing the API into Apidog
 ```
 
 ---
 
-## 4. Application Bootstrap
+## 11. Deployment
 
-### `server.js`
-
-The process entry point. Its sole job is to conditionally start the HTTP listener — the `require.main === module` guard means the file can also be `require()`-d by Vercel without spawning a listener.
-
-```
-server.js
-  └─ require('./app')  →  app.js (Express app instance)
-       └─ app.listen(3000)   [only when run directly]
-```
-
-### `app.js`
-
-The Express application factory. Responsibilities in registration order:
-
-1. **Static file serving** — `express.static('./public')` serves the landing page and assets before any middleware runs.
-2. **Body parsers** — `express.json` and `express.urlencoded` both with a 10 MB limit, covering both JSON APIs and potential form submissions.
-3. **CORS** — wildcard origin (`*`), GET and POST only, `Content-Type` and `Authorization` allowed headers.
-4. **Auth middleware** — `authMiddleware` runs on every request after CORS (see §5).
-5. **Route mounting**:
-   - `publicRoutes` — mounted at `/` (no prefix), must come before auth-gated routes since the middleware check happens before route matching
-   - `/api/email` → `emailRoutes`
-   - `/api` → `newsRoutes`
-   - `/cron` → `cronRoute`
-
-**Startup side effect**: `require('./services/firebaseAdmin')` is called in `app.js` at module load time, which triggers the Firebase Admin singleton initialization before any request arrives.
+- **Vercel:** `vercel.json` sends every route to `server.js` (`@vercel/node`). Set every variable from section 2 in the Vercel project. Env var changes only apply after a new deployment.
+- **Timeouts:** the weekly refresh is a single request of about 10–20 seconds, well within Vercel's limits. If your project doesn't use Fluid Compute, the Hobby plan's 10-second limit could still cut it off, so check the project's function settings.
+- **Cron:** nothing is scheduled inside the app. Call `/cron/refreshWeekly` weekly from an external scheduler, with the `x-api-key` header.
+- **Firebase permissions:** the service account `firebase-adminsdk-fbsvc@<project>.iam.gserviceaccount.com` needs the roles **Firebase Admin SDK Administrator Service Agent** and **Service Account Token Creator** (Google Cloud Console → IAM).
 
 ---
 
-## 5. Middleware Layer
+## 12. Troubleshooting
 
-### `middleware/authMiddleware.js`
-
-A single middleware function applied globally. Logic:
-
-```
-Request arrives
-  → Is path in PUBLIC_PATHS?
-      YES → next()  (no auth required)
-      NO  → Does header x-api-key === process.env.APP_API_KEY?
-              YES → next()
-              NO  → 401 { success: false, error: "Unauthorized access" }
-```
-
-**Public paths** (bypass auth entirely):
-- `/story/random`
-- `/style.css`, `/script.js`, `/app-logo.png`, `/instagram.png`, `/favicon.ico`
-- `/verify` (prefix match — covers `/verify/:token`)
-
-Everything else — including `/api/*`, `/cron/*`, and `/` (root) — requires the `x-api-key` header. This means the homepage (`GET /`) is also behind the API key wall at the middleware level, though `publicRoutes` serves it. In practice the static file middleware for `index.html` fires before the auth middleware processes the route, so the landing page is still reachable.
-
----
-
-## 6. Routing Architecture
-
-### `routes/newsRoutes.js` — mounted at `/api`
-
-| Method | Path | Handler summary |
-|---|---|---|
-| GET | `/api/generate` | On-demand story generation. Reads `?title=` and optional `?satireStyle=`. Calls `generateSatireStory`. |
-| GET | `/api/generate/random` | Generates a story with a self-chosen topic. Calls `generateRandomStory`. |
-| GET | `/api/weeklyArticles` | Reads the `weekly_posts/weekly_posts` Firestore document and returns `data.articles`. |
-
-**`/api/generate` flow**:
-- Missing `title` → 400
-- `satireStyle` present → passes it as `satireType` to `generateSatireStory` (character mode)
-- `satireStyle` absent → passes `null` (default mode, random persona selected)
-- `result.error` truthy → 500 with LLM error message
-- Success → 200 with full story object spread into response
-
-### `routes/publicRoutes.js` — mounted at `/`
-
-| Method | Path | Handler summary |
-|---|---|---|
-| GET | `/story/random` | Generates a random story and renders it into `templates/story.html` via string replacement |
-| GET | `/refreshWeekly` | **Calls the buggy `refreshWeekly.js` module directly** (see §16) |
-| GET | `/verify/:token` | Delegates to `emailVerificationService.verifyEmail(token)`, returns raw service result |
-| GET | `/` | Serves `public/index.html` |
-
-**`/story/random` rendering pipeline**:
-1. Calls `generateRandomStory()` → gets `{ title, paragraphs[] }`
-2. Reads `templates/story.html` synchronously via `fs.readFileSync`
-3. Replaces `{{TITLE}}`, `{{DESCRIPTION}}` (first paragraph), `{{BODY}}` (all paragraphs wrapped in `<p>` tags)
-4. All substitution values pass through `escapeHtml` before insertion (XSS protection)
-5. Sends rendered HTML string
-
-### `routes/emailRoutes.js` — mounted at `/api/email`
-
-| Method | Path | Handler summary |
-|---|---|---|
-| POST | `/api/email/send-verification` | Validates `userId` from body, calls `emailVerificationService.sendVerificationEmail` |
-| GET | `/api/email/is-verified/:uid` | Calls `emailVerificationService.isUserVerified`, returns boolean via `formatResponse` |
-
-### `routes/cronRoute.js` — mounted at `/cron`
-
-| Method | Path | Handler summary |
-|---|---|---|
-| GET | `/cron/refreshWeekly` | Triggers full batch generation across all 5 categories, awaits Firestore write, returns 200 |
-
-This is the correct, fixed implementation of the refresh flow. It awaits `generateAll()` fully before sending the response (see §10 for full pipeline).
-
----
-
-## 7. Service Layer
-
-### `services/firebaseAdmin.js` — Firebase Singleton
-
-Uses the standard `admin.apps.length` guard to ensure `admin.initializeApp()` is called exactly once regardless of how many modules `require` it. This is critical in serverless environments where module-level state can persist between warm invocations.
-
-The service account JSON is read from the `GCP_SERVICE_KEY` environment variable as a raw JSON string, parsed at runtime. This avoids committing credentials to source and works cleanly with Vercel's environment variable system.
-
-```js
-if (!admin.apps.length) {
-  serviceAccount = JSON.parse(process.env.GCP_SERVICE_KEY);
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-```
-
-Throws eagerly at startup if the variable is missing or malformed, failing fast before any request can arrive.
-
----
-
-### `services/SatireService.js` — Core LLM Orchestration
-
-This is the most complex module. It manages all interaction with the Groq inference API.
-
-#### Module-level state
-
-```js
-const usedTitles = new Set();
-```
-
-A process-lifetime Set that accumulates generated titles. Passed as `disallowedTitles` to each subsequent call within a batch to prevent duplicate headlines. **Important caveat**: this Set is never cleared between HTTP requests, so across multiple `/cron/refreshWeekly` invocations in the same process lifetime, the exclusion list grows unboundedly.
-
-#### `generateSatireStory(prompt, disallowedTitles, satireType)`
-
-The core generation function. Full execution path:
-
-**1. Mode resolution**
-```
-satireType !== null  →  isCharacterMode = true
-                         systemPrompt = promptManager.getPromptById(satireType)
-satireType === null  →  isCharacterMode = false
-                         systemPrompt = promptManager.getRandomPrompt()
-```
-
-**2. Prompt construction (CO-STAR)**
-
-`prompts/builder.js` builds one system message from the CO-STAR sections, in this order, followed by the user message with the topic:
-
-```
-[system]
-  CONTEXT     MadeNews is a satire app like The Onion
-  OBJECTIVE   news article narrated by the character | character monologue
-  TONE        selected persona (prompt + voice samples) + Onion-irony rules
-  STYLE       satire craft rules
-  AUDIENCE    who the jokes are for
-  BOUNDARIES  scope + hard limits (returns NO_GO_AREA_DETECTED only if no angle avoids them)
-  RESPONSE    exact output format for the mode
-[user]
-  Topic: {topic}
-  Avoid these topics or people: ...   ← omitted if no exclusions
-```
-
-Each rule lives in exactly one section file, so the single-story and weekly prompts never contradict each other. The weekly batch uses the compact style/boundaries variants and assigns a narrator to every article slot up front.
-
-**3. Parsing**
-
-The reply is split into a title and paragraphs; any disclaimer the model wrote is dropped and `SATIRE_DISCLAIMER` is appended by code, so every article ends with the same line.
-
-**4. Pre-flight validation**
-
-`validatePromptOrThrow(prompt)` runs before the API call. If it throws (banned keyword detected), the error propagates into the catch block where `NO_GO_AREA_DETECTED` is handled.
-
-**5. Groq API call parameters**
-
-| Parameter | Character mode | Default mode |
-|---|---|---|
-| `model` | `llama-3.3-70b-versatile` | `llama-3.3-70b-versatile` |
-| `temperature` | 0.88 | 0.70 |
-| `top_p` | 0.9 | 0.9 |
-| `max_tokens` | 1000 | 1100 |
-
-Character mode uses slightly higher temperature (more expressive, personality-driven output). Default mode uses lower temperature for more controlled deadpan delivery.
-
-**6. Response parsing**
-
-```
-raw string
-  → split on /\n\s*\n/   (blank-line delimiter)
-  → first segment  → titleLine (trimmed)
-  → remaining segments joined → content
-  → content split on /\n\s*\n/  → paragraphs[]
-```
-
-Validation: requires `finalTitle` to be non-empty and `paragraphs.length >= 2`. Failure throws `"Incomplete model response"`.
-
-**7. Sentinel check**
-
-If the model's response starts with `NO_GO_AREA_DETECTED`, it means the model itself flagged the topic (via the restrictions prompt instructing it to emit this sentinel). This is caught and re-thrown into the catch block.
-
-**8. Return shape**
-
-```js
-{
-  title: string,
-  paragraphs: string[],
-  appGenerated: false,      // always false here; set to true in batch pipeline
-  createdAt: ISO8601 string,
-  satireStyle: string | null
-}
-```
-
-**9. Error handling**
-
-Three distinct error categories returned (not thrown) to callers:
-
-| Condition | Return value |
+| Symptom | Cause and fix |
 |---|---|
-| `NO_GO_AREA_DETECTED` | `{ error: true, message: "🚫 ..." }` |
-| HTTP 429 from Groq | `{ error: true, rateLimited: true, message: "Rate limit reached." }` |
-| All other failures | `{ error: true, message: "We're having technical difficulties..." }` |
+| `Invalid GCP_SERVICE_KEY env var (length 1, starts with "{")` | The JSON is spread over several lines and only `{` was read. Put it on one line (section 2), in `.env` and in Vercel's Development variables, then restart `vercel dev`. |
+| `Missing GCP_SERVICE_KEY` locally | `.env` isn't being loaded, or the variable is empty. `app.js` loads dotenv on its first line. |
+| `7 PERMISSION_DENIED: Missing or insufficient permissions` | The service account is missing its IAM roles (section 11), or `vercel dev` is using a different key from the Vercel dashboard. |
+| `429 Rate limit reached` | Over the tokens-per-minute limit. Wait about 60 seconds between Groq calls. Check your actual limits under console.groq.com → Settings → Limits. |
+| `Request too large … output tokens per minute (OTPM)` | That model has a low output limit on your plan (e.g. preview models). Use `openai/gpt-oss-120b` or lower `*_MAX_TOKENS`. |
+| `getaddrinfo ENOTFOUND api.groq.com` / `fetch failed` | A network or DNS problem on the machine running the server. Check `nslookup api.groq.com`, your VPN or proxy, and your DNS servers. |
+| `Incomplete model response` | Check the `📦` and `⚠️ Unusable reply` log lines. `finish_reason=length` means raise `STORY_MAX_TOKENS` / `CHARACTER_MAX_TOKENS` or lower the reasoning effort. |
+| Weekly report shows `kept last week` | That category's articles were cut off or malformed. Check `finish_reason` in the log; lower `ARTICLES_PER_CATEGORY` or `WEEKLY_REASONING_EFFORT` if output runs out. |
+| Model rejects `reasoning_effort` | It's a non-reasoning model. Set the relevant `*_REASONING_EFFORT=off`. |
 
 ---
 
-#### `generateRandomStory()`
-
-Thin wrapper. Sends a self-directed prompt:
-```
-"Write a new MadeNews satire story. Generate a fresh satirical topic on your own."
-```
-No `disallowedTitles`, no `satireType`. The model selects both topic and persona randomly.
-
----
-
-#### `generateWeeklyCategoryStories(category, count = 5, customPrompt = null)`
-
-Batch generation loop for a single category.
-
-```
-for i in 0..count-1:
-  prompt = customPrompt || "Write a MadeNews satire story in the category: {category}."
-  result = await generateSatireStory(prompt, usedTitles)
-
-  if result.rateLimited:
-    wait 60 seconds
-    result = await generateSatireStory(prompt, usedTitles)   ← one retry
-
-  if result has title + paragraphs:
-    add title to usedTitles
-    push article to articles[]
-  else:
-    warn and skip
-
-  if not last iteration:
-    wait 5 seconds   ← inter-request throttle
-```
-
-The 5-second inter-request delay is a proactive TPM (tokens-per-minute) throttle to avoid hitting rate limits in the first place. The 60-second retry handles cases where the throttle wasn't enough.
-
----
-
-### `services/weeklyPostsStorageServices.js`
-
-Minimal Firestore access layer. Uses a single named document (`weekly_posts/weekly_posts`) as a singleton store for the entire article batch — not a collection of documents, but one document whose `articles` field holds the entire categorized map.
-
-```
-Collection: weekly_posts
-  Document: weekly_posts
-    articles: {
-      "Politics": [ { title, content, createdAt, appGenerated, category }, ... ],
-      "Aliens": [...],
-      "Education": [...],
-      "Technology": [...],
-      "Conspiracies": [...]
-    }
-    updatedAt: ISO8601 string   (JS Date — not server timestamp)
-    createdAt: FieldValue.serverTimestamp()
-```
-
-Note the asymmetry: `updatedAt` uses `new Date().toISOString()` (client-generated), while `createdAt` uses `FieldValue.serverTimestamp()` (server-generated). On every `saveWeeklyArticles` call, `docRef.set()` replaces the entire document — there is no partial update or merge.
-
----
-
-### `services/emailVerificationService.js`
-
-A class-based service exported as a singleton instance (`module.exports = new EmailVerificationService()`).
-
-Full lifecycle methods:
-
-| Method | Purpose |
-|---|---|
-| `generateVerificationToken(userId, email)` | Signs a JWT with 5-minute expiry |
-| `extractEmailFromUid(userId)` | Reads `users/{userId}` from Firestore, returns `email` field |
-| `sendVerificationEmail(userId)` | Full send flow (see §11) |
-| `verifyEmail(token)` | Validates JWT, checks Firestore record, marks user verified |
-| `isUserVerified(userId)` | Reads `users/{userId}.emailVerified`, cleans up verification record if true |
-| `resendVerificationEmail(userId)` | Rate-limited (2-minute cooldown) resend |
-| `getVerificationStatus(userId)` | Returns composite status object from both collections |
-| `cleanupExpiredVerifications()` | Batch-deletes expired, unverified records |
-
-JWT payload structure:
-```js
-{
-  userId,
-  email,
-  type: "email_verification",
-  iat: unix_seconds,
-  exp: iat + 300   // 5 minutes
-}
-```
-
-Both the JWT expiry and a separate `expiresAt` Firestore timestamp are checked during verification. The token string itself is also compared (`verificationData.token !== token`) as an additional binding check to invalidate tokens superseded by a resend.
-
----
-
-## 8. Prompt Engineering Architecture
-
-### `prompts/SystemPromptsManager.js`
-
-The persona registry. Implements a `SystemPromptManager` class with:
-
-- An internal array of 10 persona definitions
-- `getRandomPrompt()` — picks a random persona, but uses a `usageHistory` Set to avoid repeating recently used ones. When all personas have been used, the history resets.
-- `getPromptById(id)` — direct lookup by persona ID string
-
-**10 defined personas:**
-
-| ID | Character | Absurdity scale |
-|---|---|---|
-| `nostalgicUncle` | Conspiracy-prone older relative | 7/10 |
-| `techBroVisionary` | Silicon Valley evangelist | 8/10 |
-| `trumpStyle` | Bombastic political figure | 9/10 |
-| `genZ` | Chronically online Gen Z | 8/10 |
-| `globalDiplomat` | Overly diplomatic ambassador | 7/10 |
-| `prManager` | Corporate spin doctor | 7/10 |
-| `gossipAunt` | Small-town gossip | 8/10 |
-| `wallStreetGuru` | Finance bro | 9/10 |
-| `hollywoodProducer` | Delusional entertainment exec | 9/10 |
-| (9th entry) | (varies) | — |
-
-Each persona definition includes: name, absurdity scale, personality traits, characteristic speech patterns, and specific forbidden behaviors to maintain internal consistency.
-
-A singleton `promptManager` is exported:
-```js
-module.exports = { promptManager: new SystemPromptManager() };
-```
-
----
-
-### Prompt Sections (CO-STAR)
-
-| File | Section | What it controls |
-|---|---|---|
-| `sections/context.js` | Context | MadeNews is a labeled satire app like The Onion |
-| `sections/objective.js` | Objective | News article narrated by the character, character monologue, or the weekly batch |
-| `sections/tone.js` | Tone | Persona prompt + voice samples, Onion irony (total conviction, never winking); compact roster for weekly |
-| `sections/style.js` | Style | Satire craft: absurd premise as fact, escalation, specificity, sincere quotes |
-| `sections/audience.js` | Audience | Who the jokes are for |
-| `sections/boundaries.js` | Boundaries | In-scope topics (incl. politics), punch-up rule, 8 hard limits, NO_GO sentinel |
-| `sections/response.js` | Response | Exact output format per mode (parsed by the services) |
-
-Personas live in `SystemPromptsManager.js`; each has `prompt`, `brief` and `samples`.
-
-## 9. Content Moderation Pipeline
-
-The system uses a two-layer moderation architecture: server-side regex before the LLM call, and model-side sentinel after.
-
-### Layer 1 — `utils/promptValidation.js` (server-side, pre-call)
-
-Runs synchronously before any API request is made.
-
-**Mechanism**:
-
-1. **Keyword list** — ~40 banned terms across categories: sexual/abuse, hate speech, violence/terror, suicide/self-harm, drugs/illegal activity, cults.
-
-2. **Pattern compilation** — Each keyword is converted to a `RegExp` that allows arbitrary non-word characters between letters:
-   ```js
-   keyword → escaped → spaces replaced with [\s\W_]* → wrapped in \b...\b with 'i' flag
-   ```
-   This catches `"mass shooting"` as well as `"mass-shooting"` or `"mass  shooting"`.
-
-3. **Obfuscation patterns** — 7 additional hardcoded patterns specifically targeting character-substitution obfuscation (e.g. `r4pe`, `r-a-p-e`):
-   ```js
-   /r[\W_]*a[\W_]*p[\W_]*e/i
-   /p[\W_]*e[\W_]*d[\W_]*o/i
-   // etc.
-   ```
-
-4. **Throw behavior** — On match, throws `Error("NO_GO_AREA_DETECTED: User tried topic ...")`. This propagates into `generateSatireStory`'s catch block where it is recognized by the `startsWith("NO_GO_AREA_DETECTED")` check and returned as a user-facing error object rather than an internal error.
-
-### Layer 2 — Model sentinel (post-call)
-
-The Boundaries section (`prompts/sections/boundaries.js`) instructs the model to emit `NO_GO_AREA_DETECTED` only if no satirical angle avoids a hard limit. After receiving the raw response, `generateSatireStory` checks:
-```js
-if (raw.startsWith("NO_GO_AREA_DETECTED")) { throw new Error(raw); }
-```
-This catches cases where the prompt itself passed validation but the model's interpretation of it raised a flag.
-
----
-
-## 10. Weekly Refresh Pipeline
-
-The full execution path for `GET /cron/refreshWeekly`:
-
-```
-cronRoute.js: GET /cron/refreshWeekly
-  │
-  └─ await generateAll()
-       │
-       ├─ For each of 5 categories (sequential, not parallel):
-       │    │
-       │    └─ generateWeeklyCategoryStories(category, 5, customPrompt)
-       │         │
-       │         ├─ For each of 5 stories (sequential):
-       │         │    ├─ Build prompt string
-       │         │    ├─ await generateSatireStory(prompt, usedTitles)
-       │         │    │    ├─ validatePromptOrThrow()
-       │         │    │    ├─ POST https://api.groq.com/openai/v1/chat/completions
-       │         │    │    └─ Parse response → { title, paragraphs, ... }
-       │         │    │
-       │         │    ├─ [if rateLimited] await delay(60_000) → retry once
-       │         │    │
-       │         │    ├─ [if success] push to articles[], add title to usedTitles
-       │         │    └─ [if not last] await delay(5_000)
-       │         │
-       │         └─ return articles[]
-       │
-       ├─ categorizedArticles = { Politics: [...], Aliens: [...], ... }
-       │
-       └─ await saveWeeklyArticles(categorizedArticles)
-            └─ Firestore: weekly_posts/weekly_posts.set({ articles, updatedAt, createdAt })
-
-  └─ res.status(200).json({ success: true })   ← only after full pipeline completes
-```
-
-**Timing characteristics** (worst case, no rate limiting):
-- 5 categories × 5 stories = 25 LLM calls
-- 5-second inter-story delay × (5-1) gaps per category × 5 categories = 100 seconds of enforced delay
-- Plus actual LLM inference time (typically 2–5 seconds per call at 70B scale)
-- Total worst case: ~200–325 seconds for a clean run
-
-With a rate-limit retry, add 60 seconds per triggered retry.
-
-**`categories.json` schema**:
-```json
-{
-  "prompt": "string — custom generation instruction passed to the LLM",
-  "category": "string — label used as Firestore key and article metadata"
-}
-```
-
----
-
-## 11. Email Verification Flow
-
-### Send Flow
-
-```
-POST /api/email/send-verification  { userId }
-  │
-  ├─ Validate userId (non-empty string)
-  │
-  └─ emailVerificationService.sendVerificationEmail(userId)
-       ├─ Read users/{userId} from Firestore → get email, username
-       ├─ Check userData.emailVerified → throw if already verified
-       ├─ jwt.sign({ userId, email, type, exp: now+300 }, JWT_SECRET)
-       ├─ Write email_verifications/{userId}:
-       │    { email, token, sentAt, expiresAt: now+5min, verified: false, attempts: 0 }
-       ├─ Construct verificationUrl: ${SERVER_URL}/verify/${token}
-       └─ transporter.sendMail() → HTML email with verify button + raw link
-```
-
-### Verify Flow
-
-```
-GET /verify/:token
-  │
-  └─ emailVerificationService.verifyEmail(token)
-       ├─ jwt.verify(token, JWT_SECRET) → decoded { userId, email, type }
-       ├─ Check decoded.type === "email_verification"
-       ├─ Read email_verifications/{userId} from Firestore
-       ├─ Check: record exists, not already verified, not expired, token matches stored token
-       ├─ Update email_verifications/{userId}: { verified: true, verifiedAt, attempts++ }
-       └─ Update users/{userId}: { emailVerified: true, emailVerificationDate }
-```
-
-### Check Flow
-
-```
-GET /api/email/is-verified/:uid
-  │
-  └─ emailVerificationService.isUserVerified(uid)
-       ├─ Read users/{uid}.emailVerified
-       ├─ If true: delete email_verifications/{uid} (cleanup)
-       └─ Return boolean
-```
-
-**Security properties**:
-- Token is short-lived (5 min JWT expiry)
-- Expiry is doubly enforced: JWT `exp` claim + Firestore `expiresAt` field
-- Token binding: stored token must match the presented token (invalidates superseded tokens from resends)
-- Resend rate-limited to once per 2 minutes
-- Token type field prevents token reuse across different flows
-
----
-
-## 12. Firestore Data Model
-
-### Collection: `users`
-
-```
-users/{userId}
-  email: string
-  username: string
-  emailVerified: boolean
-  emailVerificationDate: Timestamp | null
-```
-
-### Collection: `email_verifications`
-
-```
-email_verifications/{userId}
-  email: string
-  token: string           (full JWT string)
-  sentAt: Timestamp
-  expiresAt: Date
-  verified: boolean
-  attempts: number
-  lastAttemptAt: Timestamp
-  verifiedAt: Timestamp   (added on verification)
-```
-
-### Collection: `weekly_posts`
-
-```
-weekly_posts/weekly_posts
-  articles: {
-    [category: string]: Array<{
-      title: string
-      content: string           (paragraphs joined with \n\n)
-      createdAt: ISO8601 string
-      appGenerated: true
-      category: string
-    }>
-  }
-  updatedAt: string             (client ISO8601)
-  createdAt: Timestamp          (server timestamp)
-```
-
----
-
-## 13. Frontend & Public Assets
-
-### `public/index.html`
-
-Static marketing landing page. Sections:
-- **Hero**: App logo, tagline, description, APK download button
-- **How it works**: 3-step explainer
-- **Satire styles**: Grid of 6 character type cards
-- **Testimonials**: Dark-background social proof section
-- **CTA**: Final download prompt
-
-No client-side framework. Pure HTML/CSS with `script.js` for progressive enhancement.
-
-### `public/script.js`
-
-Three behaviors:
-1. **IntersectionObserver scroll reveals** — Elements with `.animate-on-scroll` gain `visible` class when entering viewport at 0.1 threshold, triggering CSS transitions.
-2. **Ripple effect** — Click on `.ripple-btn` spawns an absolutely positioned `span` that expands and fades via CSS animation.
-3. **APK download handler** — Button with `#downloadBtn` triggers a blob download from a hardcoded APK URL.
-
-### `templates/story.html`
-
-Server-side rendered template (not a client-side framework). Uses three `{{PLACEHOLDER}}` tokens replaced via `String.replace()` in `publicRoutes.js`:
-- `{{TITLE}}` — article headline
-- `{{DESCRIPTION}}` — first paragraph (used for meta description and Open Graph)
-- `{{BODY}}` — all paragraphs as `<p>` elements
-
-Includes Open Graph meta tags for social sharing previews.
-
-### CSS Architecture
-
-| File | Scope |
-|---|---|
-| `styles.css` | Full landing page — gradient design system, animations, responsive grid |
-| `story.css` | Story display page — 30/70 sidebar/content split, mobile stacking |
-| `fonts.css` | Rubik (300–900 weight) from Google Fonts |
-
----
-
-## 14. Deployment
-
-### `vercel.json`
-
-```json
-{
-  "version": 2,
-  "builds": [{ "src": "server.js", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "server.js" }]
-}
-```
-
-All routes are rewritten to `server.js`. Vercel wraps it as a Node.js serverless function. The `require.main === module` guard in `server.js` ensures `app.listen()` is not called in the serverless context (Vercel handles port binding externally).
-
-**Serverless caveats**:
-- The `usedTitles` Set in `SatireService.js` is module-level state. In a warm Lambda/serverless invocation it persists; in a cold start it resets. This makes the deduplication behavior non-deterministic across invocations.
-- The `/cron/refreshWeekly` endpoint takes 200–325+ seconds. Vercel's default function timeout is 10 seconds (Hobby plan) / 60 seconds (Pro plan) / 900 seconds (Enterprise). Without a Vercel Pro or Enterprise plan, this endpoint will time out before completion.
-- `node-cron` (declared in `package.json`) requires a persistent process to fire scheduled jobs. In a stateless serverless environment, cron jobs do not run — the `/cron/refreshWeekly` route is designed to be triggered externally (e.g. by a cron service like cron-job.org, EasyCron, or GitHub Actions on a schedule).
-
----
-
-## 15. Environment Variables
-
-| Variable | Used in | Purpose |
-|---|---|---|
-| `GROQ_API_KEY` | `config/groq.js` | Groq API authentication |
-| `GROQ_API_URL` | `config/groq.js` | Chat completions endpoint (default Groq OpenAI-compatible URL) |
-| `GROQ_MODEL` | `config/groq.js` | Model for single stories (default `openai/gpt-oss-120b`) |
-| `WEEKLY_GROQ_MODEL` | `config/groq.js` | Model for the weekly batch (falls back to `GROQ_MODEL`) |
-| `GROQ_REASONING_EFFORT` | `config/groq.js` | `low`/`medium`/`high` for reasoning models; `off` for models that reject reasoning params |
-| `GROQ_HIDE_REASONING` | `config/groq.js` | Sends `include_reasoning: false` (default `true`) |
-| `GROQ_TPM_LIMIT` | `config/groq.js` | Your plan's tokens-per-minute limit; weekly output budget is derived from it (default `8000`) |
-| `GROQ_TOKEN_SAFETY_MARGIN`, `GROQ_CHARS_PER_TOKEN` | `config/groq.js` | Token-estimate tuning for the weekly budget |
-| `GROQ_REQUEST_TIMEOUT_MS`, `GROQ_RETRY_MAX_WAIT_SECONDS` | `config/groq.js` | HTTP timeout and max wait on a 429 retry |
-| `GROQ_TOP_P`, `STORY_*`, `CHARACTER_*`, `WEEKLY_TEMPERATURE`, `WEEKLY_MAX_TOKENS` | `config/groq.js` | Sampling and length per generation mode |
-| `STORY_REASONING_EFFORT`, `CHARACTER_REASONING_EFFORT`, `WEEKLY_REASONING_EFFORT` | `config/groq.js` | Reasoning effort per mode; each falls back to `GROQ_REASONING_EFFORT` |
-| `ARTICLES_PER_CATEGORY` | `refreshWeekly.js` | Weekly articles per category (default `2`) |
-| `GCP_SERVICE_KEY` | `firebaseAdmin.js` | Firebase service account JSON (full JSON as string) |
-| `JWT_SECRET` | `emailVerificationService.js` | JWT signing secret |
-| `EMAIL_SERVICE` | `emailVerificationService.js` | Nodemailer service name (e.g. `"gmail"`) |
-| `EMAIL_USER` | `emailVerificationService.js` | SMTP sender address |
-| `EMAIL_PASSWORD` | `emailVerificationService.js` | SMTP password / app password |
-| `SERVER_URL` | `emailVerificationService.js` | Base URL for verification link (e.g. `https://your-domain.vercel.app`) |
-| `APP_API_KEY` | `authMiddleware.js` | Secret key required in `x-api-key` header |
-
----
-
-## 16. Known Issues & Technical Debt
-
-### Critical
-
-**Duplicate `/refreshWeekly` route with buggy implementation**
-
-`publicRoutes.js` registers `GET /refreshWeekly` and calls the `refreshWeekly.js` module directly. That module still contains the original argument-order bug: it passes `categoryObject.prompt` as `category` and `categoryObject.category` as `count`. Since `count` receives a string like `"Politics"`, the loop condition `0 < "Politics"` is `false` and the loop never executes — every category returns an empty array and empty records are saved to Firestore.
-
-The correct implementation lives in `cronRoute.js` at `GET /cron/refreshWeekly`. The `publicRoutes.js` route should either be removed or updated to call `cronRoute`'s `generateAll` function.
-
-**`jsonwebtoken` not in `package.json`**
-
-`emailVerificationService.js` calls `require('jsonwebtoken')` but `jwt` is not listed in `package.json` dependencies. It works if `jsonwebtoken` happens to be a transitive dependency of another package, but this is fragile. It should be added explicitly: `npm install jsonwebtoken`.
-
-### Moderate
-
-**`usedTitles` Set grows unboundedly**
-
-The module-level `usedTitles` Set in `SatireService.js` is never cleared. Across multiple batch runs in the same process lifetime, the exclusion list passed to each `generateSatireStory` call grows indefinitely. This increases prompt size over time and may degrade generation quality or hit token limits on very long-lived processes.
-
-**`@tensorflow-models/toxicity` and `@tensorflow/tfjs` declared but unused**
-
-These are listed in `package.json` dependencies but are not imported anywhere in the codebase. Together they add significant bundle weight (~50–100 MB of model weights). They should be removed unless TensorFlow-based toxicity classification is planned.
-
-**`utils/dateHelpers.js` exports unused functions**
-
-`getLastWeekId`, `getCurrentWeekId`, and `isNewWeek` are not imported by any route, service, or middleware. They appear to be leftovers from an earlier week-based rotation design.
-
-**`config/email.js` exports an unused transporter**
-
-`emailRoutes.js` imports from `config/email.js` but never uses the imported `transporter`. `emailVerificationService.js` creates its own internal transporter using environment variables. The `config/email.js` transporter has hardcoded Ethereal test credentials and should be removed to avoid confusion.
-
-### Minor
-
-**`publicRoutes.js` imports `refreshWeekly` and `getFirestore` unnecessarily**
-
-`const { getFirestore } = require("firebase-admin/firestore")` and `const db = getFirestore()` are imported at the module level in `publicRoutes.js` but `db` is never used in any handler. Dead code.
-
-**`emailRoutes.js` has `dotenv.config` without call parentheses**
-
-Line: `const dotenv = require("dotenv"); dotenv.config` — missing `()`. The call is a no-op. Environment variables work because `dotenv.config()` is correctly called in `SatireService.js` and `emailVerificationService.js`, which load before this route in practice.
-
-**`app.js` comment misleads about route order**
-
-The comment `// Should be above auth-protected` next to `publicRoutes` registration is correct in intent but misleading in mechanism — `publicRoutes` being registered first does not bypass the global `authMiddleware` that runs before route matching. The actual bypass happens in `authMiddleware` via the `PUBLIC_PATHS` allowlist. The comment should clarify this distinction.
+## 13. Known issues
+
+- `jsonwebtoken` is used by `emailVerificationService.js` but isn't listed in `package.json`. Add it with `npm install jsonwebtoken`.
+- `@tensorflow-models/toxicity`, `@tensorflow/tfjs` and `node-cron` are declared but never used.
+- `utils/dateHelpers.js` and `config/email.js` aren't used (`emailRoutes.js` imports the transporter but never uses it).
+- `routes/emailRoutes.js` writes `dotenv.config` without `()`. This is harmless, because `app.js` loads dotenv first.
+- `routes/publicRoutes.js` and `routes/emailRoutes.js` create a Firestore `db` they never use.
+- CORS allows only the `Content-Type` and `Authorization` headers, so a browser calling the API with `x-api-key` would be blocked. The mobile app and Apidog aren't affected.
