@@ -1,16 +1,71 @@
-const axios = require("axios");
-const dotenv = require("dotenv");
+const { groqConfig, buildChatBody, postChatCompletion } = require("../config/groq");
 const { promptManager } = require("../prompts/SystemPromptsManager");
 const { validatePromptOrThrow } = require("../utils/promptValidation");
+const { SATIRE_DISCLAIMER } = require("../prompts/disclaimer");
 
-dotenv.config();
+const { buildStoryMessages } = require("../prompts");
 
-const situationalPrompt = require("../prompts/situationalPrompt");
-const restrictionsPrompt = require("../prompts/restrictionsPrompt");
-const formatPrompt = require("../prompts/formatPrompt");
-const characterFormatPrompt = require("../prompts/characterFormatPrompt")
+const TITLE_PREFIX = /^\s*[#*_\s]*(title|headline)\s*[:\-–]\s*/i;
+const cleanTitle = (t) => t.replace(TITLE_PREFIX, "").replace(/^[#*_"“\s]+|[*_"”\s]+$/g, "").trim();
 
-const usedTitles = new Set();
+// Splits a model reply into title + paragraphs. Detects a missing title instead of
+// mistaking the first paragraph for one. Any disclaimer the model wrote is dropped;
+// the app adds the exact one.
+const parseStory = (raw) => {
+  let blocks = String(raw)
+    .trim()
+    .split(/\n\s*\n/)
+    .map((b) => b.trim())
+    .filter((b) => b && !/satire service like the onion/i.test(b));
+
+  // Some replies separate paragraphs with single line breaks; split those too.
+  if (blocks.length <= 2 && blocks.some((b) => b.includes("\n"))) {
+    blocks = blocks.flatMap((b) => b.split(/\n+/)).map((b) => b.trim()).filter(Boolean);
+  }
+
+  let title = "";
+  if (blocks.length) {
+    const [firstLine, ...restOfBlock] = blocks[0].split("\n");
+    const words = blocks[0].split(/\s+/).length;
+    if (TITLE_PREFIX.test(firstLine)) {
+      // "TITLE: ..." line; text directly under it (no blank line) is a paragraph
+      title = cleanTitle(firstLine);
+      blocks = restOfBlock.join("\n").trim() ? [restOfBlock.join("\n").trim(), ...blocks.slice(1)] : blocks.slice(1);
+    } else if (words <= 25 && restOfBlock.length === 0) {
+      title = cleanTitle(firstLine);
+      blocks = blocks.slice(1);
+    }
+  }
+  return { title, paragraphs: blocks };
+};
+
+// Fallback when the model skipped the title: one small call (~500 tokens) for a headline.
+const generateTitle = async (paragraphs, persona, isCharacterMode) => {
+  try {
+    const result = await postChatCompletion(
+      buildChatBody({
+        model: groqConfig.model,
+        messages: [
+          {
+            role: "system",
+            content: `You write titles for MadeNews, a satire app like The Onion. Write one ${
+              isCharacterMode ? "title the narrator would write themselves" : "parody-news headline"
+            } for the article below, in the voice of ${persona.name}. At most 15 words. Output only the title.`,
+          },
+          { role: "user", content: paragraphs.slice(0, 2).join("\n\n") },
+        ],
+        temperature: 0.9,
+        maxTokens: 400,
+        // "low" for reasoning models; omitted when reasoning is off (e.g. Llama)
+        reasoningEffort: (isCharacterMode ? groqConfig.character : groqConfig.story).reasoningEffort ? "low" : null,
+      })
+    );
+    return cleanTitle((result.data.choices[0].message.content || "").split("\n")[0]);
+  } catch (error) {
+    console.warn("Title fallback failed:", error.message);
+    return "";
+  }
+};
 
 const generateSatireStory = async (
   prompt,
@@ -25,74 +80,60 @@ const generateSatireStory = async (
     ? promptManager.getPromptById(satireType)
     : promptManager.getRandomPrompt();
 
-  // Build message stack based on mode
-  const messages = [
-    { role: "system", content: restrictionsPrompt },
-    ...(!isCharacterMode
-      ? [
-          { role: "system", content: situationalPrompt },
-          { role: "system", content: formatPrompt },
-        ]
-      : [
-          { role: "system", content: characterFormatPrompt },
-        ]),
-    { role: "system", content: systemPrompt.prompt },
-  ];
-
-  const exclusionText =
-    disallowedTitles.length > 0
-      ? `Avoid using any of these topics or people: ${disallowedTitles.join(", ")}.`
-      : "";
-
-  const userPrompt = `
-${prompt}
-
-${exclusionText}
-
-Format strictly:
-<One-line title>
-
-<Three standalone paragraphs separated by a blank line>
-`;
+  const messages = buildStoryMessages({
+    topic: prompt,
+    persona: systemPrompt,
+    isCharacterMode,
+    exclusions: disallowedTitles,
+  });
 
   try {
-    validatePromptOrThrow(prompt);
+    await validatePromptOrThrow(prompt);
 
-    const temperature = isCharacterMode ? 0.88 : 0.70;
-    const max_tokens = isCharacterMode ? 1000 : 1100;
+    const mode = isCharacterMode ? groqConfig.character : groqConfig.story;
 
-    const result = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        model: process.env.GROQ_MODEL,
-        messages: [...messages, { role: "user", content: userPrompt }],
-        temperature,
-        top_p: 0.9,
-        max_tokens,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
+    const result = await postChatCompletion(
+      buildChatBody({
+        model: groqConfig.model,
+        messages,
+        temperature: mode.temperature,
+        maxTokens: mode.maxTokens,
+        reasoningEffort: mode.reasoningEffort,
+      })
     );
 
-    const raw = result.data.choices[0].message.content.trim();
+    const choice = result.data.choices[0];
+    const raw = (choice.message.content || "").trim();
+    console.log(
+      `📦 story finish_reason=${choice.finish_reason} tokens=${JSON.stringify(result.data.usage?.completion_tokens_details || {})} completion=${result.data.usage?.completion_tokens}`
+    );
 
     if (raw.startsWith("NO_GO_AREA_DETECTED")) {
       console.log("Flagged by model:", raw);
       throw new Error(raw);
     }
 
-    const [titleLine, ...rest] = raw.split(/\n\s*\n/);
-    const finalTitle = titleLine.trim();
-    const content = rest.join("\n\n").trim();
-    const paragraphs = content.split(/\n\s*\n/);
+    const parsed = parseStory(raw);
+    const storyParagraphs = parsed.paragraphs;
+    let finalTitle = parsed.title;
 
-    if (!finalTitle || paragraphs.length < 2) {
-      throw new Error("Incomplete model response");
+    if (!finalTitle && storyParagraphs.length >= 2) {
+      console.warn("Model skipped the title; generating one.");
+      finalTitle = await generateTitle(storyParagraphs, systemPrompt, isCharacterMode);
     }
+
+    if (!finalTitle || storyParagraphs.length < 2) {
+      console.warn(
+        `⚠️ Unusable reply: finish_reason=${choice.finish_reason}, title=${JSON.stringify(finalTitle)}, paragraphs=${storyParagraphs.length}, raw start: ${JSON.stringify(raw.slice(0, 300))}`
+      );
+      throw new Error(
+        choice.finish_reason === "length"
+          ? "Incomplete model response (hit the token cap; raise STORY_MAX_TOKENS/CHARACTER_MAX_TOKENS or lower reasoning effort)"
+          : "Incomplete model response"
+      );
+    }
+
+    const paragraphs = [...storyParagraphs, SATIRE_DISCLAIMER];
 
     return {
       title: finalTitle,
@@ -131,53 +172,15 @@ Format strictly:
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const generateRandomStory = async () => {
   const userPrompt = `Write a new MadeNews satire story. Generate a fresh satirical topic on your own.`;
   return await generateSatireStory(userPrompt);
 };
 
-const generateWeeklyCategoryStories = async (category, count = 5, customPrompt = null) => {
-  const articles = [];
-
-  for (let i = 0; i < count; i++) {
-    const prompt = customPrompt || `Write a MadeNews satire story in the category: ${category}.`;
-    let result = await generateSatireStory(prompt, Array.from(usedTitles));
-
-    if (result?.rateLimited) {
-      console.warn(`⚠️ Rate limited on story ${i + 1}/${count} for [${category}]. Waiting 60 seconds before retrying...`);
-      await delay(60000);
-      result = await generateSatireStory(prompt, Array.from(usedTitles));
-    }
-
-    if (result?.title && result?.paragraphs) {
-      usedTitles.add(result.title.toLowerCase());
-      articles.push({
-        title: result.title,
-        content: result.paragraphs.join("\n\n"),
-        createdAt: result.createdAt,
-        appGenerated: true,
-        category,
-      });
-      console.log(`✅ Story ${i + 1}/${count} for [${category}] generated.`);
-    } else {
-      console.warn(`⚠️ Skipped a failed story for category: ${category}`);
-    }
-
-    if (i < count - 1) {
-      console.log("⏳ Waiting 5 seconds before next story...");
-      await delay(5000);
-    }
-  }
-
-  return articles;
-};
-
 // ─── EXPORTS ─────────────────────────────────────────────────────────────────
 
 module.exports = {
+  parseStory,
   generateSatireStory,
   generateRandomStory,
-  generateWeeklyCategoryStories,
 };

@@ -80,11 +80,18 @@ made-news-server-main/
 │   └── emailVerificationService.js    # Full JWT email verification lifecycle
 │
 ├── prompts/
-│   ├── SystemPromptsManager.js # Persona registry + random/ID selection
-│   ├── restrictionsPrompt.js   # Hard content restrictions injected on every call
-│   ├── situationalPrompt.js    # Default satirical tone and style guidelines
-│   ├── formatPrompt.js         # Output format rules (title + 3 paragraphs)
-│   └── characterFormatPrompt.js # Character-mode format rules
+│   ├── SystemPromptsManager.js # Persona registry (prompt, brief, voice samples) + selection
+│   ├── builder.js              # Assembles CO-STAR prompts for stories and the weekly batch
+│   ├── disclaimer.js           # Satire disclaimer appended by code to every article
+│   ├── index.js                # Entry point (re-exports builder)
+│   └── sections/               # One CO-STAR section per file
+│       ├── context.js          # C: what MadeNews is
+│       ├── objective.js        # O: what to produce, per mode
+│       ├── style.js            # S: satire craft rules (full + compact)
+│       ├── tone.js             # T: persona voice with Onion-style irony
+│       ├── audience.js         # A: who the jokes are for
+│       ├── boundaries.js       # Scope + hard limits (NO_GO output)
+│       └── response.js         # R: exact output format per mode
 │
 ├── middleware/
 │   └── authMiddleware.js       # x-api-key header enforcement for protected routes
@@ -258,39 +265,29 @@ satireType === null  →  isCharacterMode = false
                          systemPrompt = promptManager.getRandomPrompt()
 ```
 
-**2. Message stack construction**
+**2. Prompt construction (CO-STAR)**
 
-The Groq API receives a multi-system-message array. Order matters — later messages can reinforce earlier ones:
-
-```
-Character Mode OFF:
-  [system: restrictionsPrompt]
-  [system: situationalPrompt]
-  [system: formatPrompt]
-  [system: selectedPersona.prompt]
-  [user: userPrompt]
-
-Character Mode ON:
-  [system: restrictionsPrompt]
-  [system: characterFormatPrompt]
-  [system: selectedPersona.prompt]
-  [user: userPrompt]
-```
-
-`restrictionsPrompt` always leads. This ensures content policy rules are the first context the model receives, before any style or persona instructions that might conflict.
-
-**3. User prompt construction**
+`prompts/builder.js` builds one system message from the CO-STAR sections, in this order, followed by the user message with the topic:
 
 ```
-{topic}
-
-Avoid using any of these topics or people: {title1}, {title2}, ...   ← omitted if no exclusions
-
-Format strictly:
-<One-line title>
-
-<Three standalone paragraphs separated by a blank line>
+[system]
+  CONTEXT     MadeNews is a satire app like The Onion
+  OBJECTIVE   news article narrated by the character | character monologue
+  TONE        selected persona (prompt + voice samples) + Onion-irony rules
+  STYLE       satire craft rules
+  AUDIENCE    who the jokes are for
+  BOUNDARIES  scope + hard limits (returns NO_GO_AREA_DETECTED only if no angle avoids them)
+  RESPONSE    exact output format for the mode
+[user]
+  Topic: {topic}
+  Avoid these topics or people: ...   ← omitted if no exclusions
 ```
+
+Each rule lives in exactly one section file, so the single-story and weekly prompts never contradict each other. The weekly batch uses the compact style/boundaries variants and assigns a narrator to every article slot up front.
+
+**3. Parsing**
+
+The reply is split into a title and paragraphs; any disclaimer the model wrote is dropped and `SATIRE_DISCLAIMER` is appended by code, so every article ends with the same line.
 
 **4. Pre-flight validation**
 
@@ -472,45 +469,19 @@ module.exports = { promptManager: new SystemPromptManager() };
 
 ---
 
-### Prompt Stack Breakdown
+### Prompt Sections (CO-STAR)
 
-#### `restrictionsPrompt.js`
+| File | Section | What it controls |
+|---|---|---|
+| `sections/context.js` | Context | MadeNews is a labeled satire app like The Onion |
+| `sections/objective.js` | Objective | News article narrated by the character, character monologue, or the weekly batch |
+| `sections/tone.js` | Tone | Persona prompt + voice samples, Onion irony (total conviction, never winking); compact roster for weekly |
+| `sections/style.js` | Style | Satire craft: absurd premise as fact, escalation, specificity, sincere quotes |
+| `sections/audience.js` | Audience | Who the jokes are for |
+| `sections/boundaries.js` | Boundaries | In-scope topics (incl. politics), punch-up rule, 8 hard limits, NO_GO sentinel |
+| `sections/response.js` | Response | Exact output format per mode (parsed by the services) |
 
-The content firewall. Injected first in every request. Instructs the model to:
-- Never generate sexual, violent, hateful, or self-harm content
-- Never produce real misinformation about real people
-- Emit the string `NO_GO_AREA_DETECTED: "{topic}"` if the request violates any rule
-
-This sentinel is checked in `generateSatireStory` before parsing, allowing the model itself to act as a second-layer content filter after the server-side `validatePromptOrThrow`.
-
-#### `situationalPrompt.js`
-
-Tone and conceptual guidelines for standard (non-character) mode:
-- Escalate human ego and institutional absurdity
-- Deadpan delivery — treat ridiculous premises as factual reporting
-- Fake expert quotes stated with complete authority
-- Invented statistics presented as gospel
-- Surrealist escalation across paragraphs
-
-#### `formatPrompt.js`
-
-Output structure enforcement for standard mode:
-- One-line title followed by exactly 3 paragraphs
-- Blank line separating each paragraph
-- No HTML, no Markdown, no formatting characters
-- Corporate-sincere dialogue
-- Increasingly absurd paragraph escalation
-
-#### `characterFormatPrompt.js`
-
-Character mode format rules override the standard format prompt:
-- 3 paragraphs of 4–6 sentences each
-- Opens with an in-character memory or hot take
-- Contains off-topic tangents consistent with the persona
-- Ends with a character-specific punchline
-- Absolute zero self-awareness — the character never breaks frame
-
----
+Personas live in `SystemPromptsManager.js`; each has `prompt`, `brief` and `samples`.
 
 ## 9. Content Moderation Pipeline
 
@@ -541,7 +512,7 @@ Runs synchronously before any API request is made.
 
 ### Layer 2 — Model sentinel (post-call)
 
-The `restrictionsPrompt` instructs `llama-3.3-70b-versatile` to emit `NO_GO_AREA_DETECTED` if the topic violates policy. After receiving the raw response, `generateSatireStory` checks:
+The Boundaries section (`prompts/sections/boundaries.js`) instructs the model to emit `NO_GO_AREA_DETECTED` only if no satirical angle avoids a hard limit. After receiving the raw response, `generateSatireStory` checks:
 ```js
 if (raw.startsWith("NO_GO_AREA_DETECTED")) { throw new Error(raw); }
 ```
@@ -764,7 +735,18 @@ All routes are rewritten to `server.js`. Vercel wraps it as a Node.js serverless
 
 | Variable | Used in | Purpose |
 |---|---|---|
-| `GROQ_API_KEY` | `SatireService.js` | Groq API authentication |
+| `GROQ_API_KEY` | `config/groq.js` | Groq API authentication |
+| `GROQ_API_URL` | `config/groq.js` | Chat completions endpoint (default Groq OpenAI-compatible URL) |
+| `GROQ_MODEL` | `config/groq.js` | Model for single stories (default `openai/gpt-oss-120b`) |
+| `WEEKLY_GROQ_MODEL` | `config/groq.js` | Model for the weekly batch (falls back to `GROQ_MODEL`) |
+| `GROQ_REASONING_EFFORT` | `config/groq.js` | `low`/`medium`/`high` for reasoning models; `off` for models that reject reasoning params |
+| `GROQ_HIDE_REASONING` | `config/groq.js` | Sends `include_reasoning: false` (default `true`) |
+| `GROQ_TPM_LIMIT` | `config/groq.js` | Your plan's tokens-per-minute limit; weekly output budget is derived from it (default `8000`) |
+| `GROQ_TOKEN_SAFETY_MARGIN`, `GROQ_CHARS_PER_TOKEN` | `config/groq.js` | Token-estimate tuning for the weekly budget |
+| `GROQ_REQUEST_TIMEOUT_MS`, `GROQ_RETRY_MAX_WAIT_SECONDS` | `config/groq.js` | HTTP timeout and max wait on a 429 retry |
+| `GROQ_TOP_P`, `STORY_*`, `CHARACTER_*`, `WEEKLY_TEMPERATURE`, `WEEKLY_MAX_TOKENS` | `config/groq.js` | Sampling and length per generation mode |
+| `STORY_REASONING_EFFORT`, `CHARACTER_REASONING_EFFORT`, `WEEKLY_REASONING_EFFORT` | `config/groq.js` | Reasoning effort per mode; each falls back to `GROQ_REASONING_EFFORT` |
+| `ARTICLES_PER_CATEGORY` | `refreshWeekly.js` | Weekly articles per category (default `2`) |
 | `GCP_SERVICE_KEY` | `firebaseAdmin.js` | Firebase service account JSON (full JSON as string) |
 | `JWT_SECRET` | `emailVerificationService.js` | JWT signing secret |
 | `EMAIL_SERVICE` | `emailVerificationService.js` | Nodemailer service name (e.g. `"gmail"`) |

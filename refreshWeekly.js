@@ -1,22 +1,11 @@
 const categories = require("./categories.json");
-const { saveWeeklyArticles } = require("./services/weeklyPostsStorageServices");
-const { generateWeeklyCategoryStories } = require("./services/SatireService");
+const { generateWeeklyFeed } = require("./services/WeeklyBatchService");
 
-const generateAll = async () => {
+// One Groq request for the whole feed (see services/WeeklyBatchService.js).
+const ARTICLES_PER_CATEGORY = Number(
+  process.env.ARTICLES_PER_CATEGORY || process.env.WEEKLY_ARTICLES_PER_CATEGORY || 2
+);
 
-  const categorizedArticles = {};
-
-  for (const categoryObject of categories) {
-    const stories = await generateWeeklyCategoryStories(
-      categoryObject.prompt,
-      categoryObject.category
-    );
-    categorizedArticles[categoryObject.category] = stories;
-  }
-
-  await saveWeeklyArticles(categorizedArticles);
-
-  console.log("✅ Weekly articles saved to Firestore!");
-};
+const generateAll = async () => generateWeeklyFeed(categories, ARTICLES_PER_CATEGORY);
 
 module.exports = generateAll;

@@ -36,8 +36,13 @@ router.get("/story/random", async (req, res) => {
 });
 
 router.get("/refreshWeekly", async (req, res) => {
-  await refreshWeekly();
-  res.status(200).json({ success: true });
+  try {
+    const { newCount, report } = await refreshWeekly();
+    res.status(200).json({ success: true, newCount, report });
+  } catch (error) {
+    console.error("Error during weekly refresh:", error.response?.data ?? error.message);
+    res.status(500).json({ success: false, error: "Failed to refresh weekly articles" });
+  }
 });
 
 router.get("/verify/:token", async (req, res) => {

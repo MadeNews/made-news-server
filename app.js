@@ -1,3 +1,4 @@
+require("dotenv").config(); // must run before anything reads process.env
 const express = require("express");
 const cors = require("cors");
 const path = require("path");

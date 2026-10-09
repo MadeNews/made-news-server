@@ -1,0 +1,711 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MadeNews API",
+    "version": "1.1.0",
+    "description": "MadeNews satire server. All routes except /story/random and /verify/{token} need the x-api-key header (APP_API_KEY). Groq free tier: 8K tokens/min, so wait ~60s between a story call and a weekly refresh."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local (vercel dev)"
+    },
+    {
+      "url": "https://made-news-server.vercel.app",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "ApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Stories"
+    },
+    {
+      "name": "Weekly feed"
+    },
+    {
+      "name": "Email verification"
+    },
+    {
+      "name": "Public"
+    }
+  ],
+  "paths": {
+    "/api/generate": {
+      "get": {
+        "tags": [
+          "Stories"
+        ],
+        "summary": "Generate one story from a topic",
+        "operationId": "generateStory",
+        "description": "News mode when satireStyle is omitted (random persona). Character mode when satireStyle is set. Uses ~3-4K Groq tokens.",
+        "parameters": [
+          {
+            "name": "title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Prime Minister launches a 40-day summit on the meaning of the word 'urgent'"
+          },
+          {
+            "name": "satireStyle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nostalgicUncle",
+                "techBroVisionary",
+                "trumpStyle",
+                "genZ",
+                "globalDiplomat",
+                "prManager",
+                "gossipAunt",
+                "wallStreetGuru",
+                "hollywoodProducer"
+              ]
+            },
+            "example": "wallStreetGuru"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Story generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Story"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing title",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "description": "Model error, NO_GO topic, or rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generate/random": {
+      "get": {
+        "tags": [
+          "Stories"
+        ],
+        "summary": "Generate one story on a model-chosen topic",
+        "operationId": "generateRandomStory",
+        "responses": {
+          "200": {
+            "description": "Story generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Story"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "description": "Model error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weeklyArticles": {
+      "get": {
+        "tags": [
+          "Weekly feed"
+        ],
+        "summary": "Read the saved weekly feed (Firestore weekly_posts)",
+        "operationId": "getWeeklyArticles",
+        "responses": {
+          "200": {
+            "description": "Feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyFeed"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No feed saved yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Firestore error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cron/refreshWeekly": {
+      "get": {
+        "tags": [
+          "Weekly feed"
+        ],
+        "summary": "Regenerate the weekly feed (one Groq batch request)",
+        "operationId": "refreshWeekly",
+        "description": "OVERWRITES the live feed in Firestore (local and production share the same Firebase project). Takes ~15-30s. Categories that fail keep last week's articles.",
+        "responses": {
+          "200": {
+            "description": "Feed refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "description": "Refresh failed; previous feed left untouched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/refreshWeekly": {
+      "get": {
+        "tags": [
+          "Weekly feed"
+        ],
+        "summary": "Same as /cron/refreshWeekly (legacy public route path, still needs x-api-key)",
+        "operationId": "refreshWeeklyLegacy",
+        "responses": {
+          "200": {
+            "description": "Feed refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "description": "Refresh failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/email/send-verification": {
+      "post": {
+        "tags": [
+          "Email verification"
+        ],
+        "summary": "Send a verification email to a Firebase user",
+        "operationId": "sendVerification",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "description": "Firebase Auth UID"
+                  }
+                }
+              },
+              "example": {
+                "userId": "REPLACE_WITH_A_TEST_USER_UID"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing userId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "description": "Failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/email/is-verified/{uid}": {
+      "get": {
+        "tags": [
+          "Email verification"
+        ],
+        "summary": "Check if a user's email is verified",
+        "operationId": "isVerified",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "REPLACE_WITH_A_TEST_USER_UID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status in data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "description": "Failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/story/random": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Random story rendered as an HTML page (no API key)",
+        "operationId": "storyRandomHtml",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "HTML page",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Generation failed",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify/{token}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Email verification link target (no API key)",
+        "operationId": "verifyEmail",
+        "security": [],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verification result page",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "Value of APP_API_KEY"
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing or wrong x-api-key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": false
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            },
+            "example": {
+              "success": false,
+              "error": "Unauthorized access"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Story": {
+        "type": "object",
+        "required": [
+          "success",
+          "title",
+          "paragraphs"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "title": {
+            "type": "string",
+            "example": "Parliament Declares Itself Emotionally Unavailable Until Q3"
+          },
+          "paragraphs": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "string"
+            },
+            "description": "The story's paragraphs; the last item is always the MadeNews satire disclaimer (added by the server)"
+          },
+          "appGenerated": {
+            "type": "boolean",
+            "example": false
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "satireStyle": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "nostalgicUncle",
+              "techBroVisionary",
+              "trumpStyle",
+              "genZ",
+              "globalDiplomat",
+              "prManager",
+              "gossipAunt",
+              "wallStreetGuru",
+              "hollywoodProducer",
+              null
+            ]
+          }
+        }
+      },
+      "WeeklyArticle": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "description": "Paragraphs joined by blank lines, ending with the satire disclaimer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "appGenerated": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string"
+          }
+        }
+      },
+      "WeeklyFeed": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "articles": {
+            "type": "object",
+            "properties": {
+              "Politics": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WeeklyArticle"
+                }
+              },
+              "Aliens": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WeeklyArticle"
+                }
+              },
+              "Education": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WeeklyArticle"
+                }
+              },
+              "Technology": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WeeklyArticle"
+                }
+              },
+              "Conspiracies": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WeeklyArticle"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RefreshResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "newCount": {
+            "type": "integer",
+            "example": 10
+          },
+          "report": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "Politics": "new (2)",
+              "Aliens": "new (2)",
+              "Education": "new (2)",
+              "Technology": "new (2)",
+              "Conspiracies": "new (2)"
+            }
+          }
+        }
+      },
+      "Envelope": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}

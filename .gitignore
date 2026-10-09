@@ -4,3 +4,4 @@ node_modules
 .vercel
 serviceKey.json
 .env*
+!.env.example
